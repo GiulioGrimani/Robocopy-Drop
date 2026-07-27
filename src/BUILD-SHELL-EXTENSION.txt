@@ -1,0 +1,31 @@
+ROBOCOPY DROP SHELL EXTENSION - SOURCE BUILD
+=============================================
+
+The MSI kit normally uses the two stable x64 DLLs under payload\it and
+payload\en. Their SHA-256 values are locked by tools\Build-Release.ps1.
+
+The same C++ source supports both languages. To rebuild it, open the
+"Developer Command Prompt for VS 2022" configured for x64 and run these
+commands from the kit root:
+
+Italian:
+  cl /nologo /std:c++17 /EHsc /O2 /LD /DUNICODE /D_UNICODE ^
+     src\RobocopyDropExtension.cpp ^
+     /link /OUT:payload\it\RobocopyDropExtension.dll ^
+     shell32.lib ole32.lib user32.lib uuid.lib
+
+English:
+  cl /nologo /std:c++17 /EHsc /O2 /LD /DUNICODE /D_UNICODE ^
+     /DROBOCOPYDROP_ENGLISH ^
+     src\RobocopyDropExtension.cpp ^
+     /link /OUT:payload\en\RobocopyDropExtension.dll ^
+     shell32.lib ole32.lib user32.lib uuid.lib
+
+After rebuilding the DLLs:
+1. update expectedItDll and expectedEnDll in tools\Build-Release.ps1;
+2. rebuild and test both MSI languages in Windows Sandbox;
+3. sign both DLLs before packaging a public release.
+
+The source uses only Windows SDK/Visual C++ headers and libraries. The
+prebuilt binaries in this kit were carried forward from the tested Classic
+baseline; they were not rebuilt in the Linux preparation environment.

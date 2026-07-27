@@ -1,0 +1,94 @@
+ROBOCOPY DROP 1.6.0 - DEPLOY E RELEASE GITHUB
+================================================
+
+CONFIGURAZIONE
+--------------
+Eseguire Configura-GitHub.cmd prima della build pubblica. Il file
+github-release.json contiene:
+- owner: utente o organizzazione GitHub;
+- repository: nome repository;
+- apiVersion: 2026-03-10;
+- requireSignedUpdates: true/false;
+- allowedSignerThumbprints: elenco facoltativo di thumbprint SHA-1 del
+  certificato Authenticode autorizzato.
+
+La configurazione viene incorporata in RobocopyDropRunner.exe.config. Se owner
+e vuoto, il controllo aggiornamenti resta disabilitato.
+
+ASSET DI RELEASE
+----------------
+L'updater cerca esattamente:
+- RobocopyDrop-X.Y.Z-it-x64.msi
+- RobocopyDrop-X.Y.Z-en-x64.msi
+
+La release deve essere pubblicata, stabile, non draft e non prerelease.
+Il tag consigliato e vX.Y.Z.
+
+COMPORTAMENTO UPDATE
+--------------------
+- Check automatico al massimo ogni 24 ore quando una finestra si apre.
+- Nessun servizio o agent residente.
+- Nessuna interruzione di copia o verifica.
+- Conferma utente prima del download.
+- HTTPS e allowlist degli host GitHub.
+- Controllo dimensione e SHA-256 pubblicato da GitHub.
+- Firma Authenticode verificata se presente.
+- Con requireSignedUpdates=true, un MSI non firmato o non attendibile e
+  rifiutato.
+- Con allowedSignerThumbprints valorizzato, il firmatario deve coincidere.
+- Avvio: msiexec.exe /i <MSI> /passive /norestart.
+
+MENU START
+----------
+La cartella Robocopy Drop contiene cinque voci:
+1. Impostazioni Robocopy Drop
+2. Guida Robocopy Drop
+3. Apri cartella report
+4. Controlla aggiornamenti Robocopy Drop
+5. Disinstalla Robocopy Drop
+
+BUILD LOCALE
+------------
+1. Windows 10/11 x64 nativo.
+2. Configurare GitHub.
+3. Verificare docs\NOTICE-WIX.txt.
+4. Eseguire Crea-MSI.cmd.
+5. Per una release firmata usare il build script con PfxPath o
+   CertificateThumbprint.
+6. Verificare release\SHA256SUMS.txt e release-manifest.json.
+
+GITHUB ACTIONS
+--------------
+Il workflow release.yml si attiva con tag vX.Y.Z.
+Configurazione repository:
+- variable WIX_OSMF_ACCEPTED=true, dopo verifica dei termini;
+- secret WINDOWS_SIGNING_PFX_BASE64, facoltativo;
+- secret WINDOWS_SIGNING_PFX_PASSWORD, facoltativo.
+
+La build non firmata e ammessa per test, ma non e consigliata per distribuzione
+pubblica. SmartScreen e policy aziendali possono avvisare o bloccare nuovi
+binari non firmati.
+
+TEST MINIMO
+-----------
+1. Upgrade da 1.5.2 a 1.6.0.
+2. Impostazioni: Annulla, Esc e X chiudono senza salvare.
+3. Controlla aggiornamenti senza nuova release: nessun update.
+4. Pubblicare una release test in repository separato e verificare notifica.
+5. Asset con digest errato: installazione bloccata.
+6. Con firma obbligatoria, MSI non firmato: installazione bloccata.
+7. Copia in corso: nessuna finestra update intrusiva.
+8. Copia completata: link versione disponibile visibile.
+9. Disinstalla Robocopy Drop: conferma Windows Installer.
+10. Per-user e per-machine, IT e EN.
+
+RILEVAMENTO
+-----------
+DisplayName: Robocopy Drop
+Versione: 1.6.0
+UpgradeCode: {9D8B3F4E-4ABC-4803-8A6E-D1C6C02B9A88}
+Architettura: x64
+Sistemi: Windows 10/11 x64 nativo
+Telemetria: nessuna
+Agent/hotkey: assenti
+Update provider: GitHub Releases

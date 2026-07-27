@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<configuration>
+  <appSettings>
+    <add key="GitHubOwner" value="__GITHUB_OWNER__" />
+    <add key="GitHubRepository" value="__GITHUB_REPOSITORY__" />
+    <add key="GitHubApiVersion" value="__GITHUB_API_VERSION__" />
+    <add key="RequireSignedUpdates" value="__REQUIRE_SIGNED_UPDATES__" />
+    <add key="AllowedSignerThumbprints" value="__ALLOWED_SIGNER_THUMBPRINTS__" />
+  </appSettings>
+  <startup useLegacyV2RuntimeActivationPolicy="true">
+    <supportedRuntime version="v4.0" sku=".NETFramework,Version=v4.8" />
+  </startup>
+  <runtime>
+    <AppContextSwitchOverrides value="Switch.System.IO.UseLegacyPathHandling=false;Switch.System.IO.BlockLongPaths=false" />
+  </runtime>
+</configuration>

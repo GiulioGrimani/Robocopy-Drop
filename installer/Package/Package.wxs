@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <Package Name="Robocopy Drop"
+           Manufacturer="$(var.Publisher)"
+           Version="$(var.ProductVersion)"
+           UpgradeCode="{9D8B3F4E-4ABC-4803-8A6E-D1C6C02B9A88}"
+           Language="$(var.ProductLanguage)"
+           Scope="perUserOrMachine"
+           InstallerVersion="500"
+           Compressed="yes">
+
+    <SummaryInformation Description="$(var.ProductDescription)"
+                        Manufacturer="$(var.Publisher)" />
+
+    <MajorUpgrade DowngradeErrorMessage="$(var.DowngradeMessage)"
+                  AllowSameVersionUpgrades="yes"
+                  IgnoreLanguage="yes"
+                  Schedule="afterInstallInitialize" />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <util:QueryNativeMachine />
+    <PropertyRef Id="WIX_IS_NETFRAMEWORK_48_OR_LATER_INSTALLED" />
+    <Property Id="WINDOWS_CURRENT_BUILD">
+      <RegistrySearch Id="WindowsCurrentBuildSearch"
+                      Root="HKLM"
+                      Key="SOFTWARE\Microsoft\Windows NT\CurrentVersion"
+                      Name="CurrentBuildNumber"
+                      Type="raw"
+                      Bitness="always64" />
+    </Property>
+    <Launch Condition="Installed OR WIX_IS_NETFRAMEWORK_48_OR_LATER_INSTALLED"
+            Message="$(var.NetFxMessage)" />
+    <Launch Condition="Installed OR (VersionNT64 AND WINDOWS_CURRENT_BUILD &gt;= 10240)"
+            Message="$(var.OsMessage)" />
+    <Launch Condition="Installed OR WIX_NATIVE_MACHINE = 34404"
+            Message="$(var.ArchMessage)" />
+
+    <Icon Id="RobocopyDropIcon" SourceFile="$(var.AssetsDir)\RobocopyDrop.ico" />
+    <Property Id="ARPPRODUCTICON" Value="RobocopyDropIcon" />
+    <Property Id="ARPCOMMENTS" Value="$(var.ProductDescription)" />
+    <Property Id="DISABLEADVTSHORTCUTS" Value="1" />
+
+    <util:CloseApplication Id="CloseRobocopyDropRunner"
+                           Target="RobocopyDropRunner.exe"
+                           CloseMessage="yes"
+                           Timeout="10"
+                           TerminateProcess="0"
+                           RebootPrompt="no"
+                           Condition="NOT Installed OR REINSTALL OR REMOVE=&quot;ALL&quot; OR WIX_UPGRADE_DETECTED" />
+    <!-- Close components introduced by the experimental 1.5.0 branch so
+         this stable MSI can upgrade it cleanly. These files are not installed
+         by the classic build. -->
+    <util:CloseApplication Id="CloseRobocopyDropCopy"
+                           Target="RobocopyDropCopy.exe"
+                           CloseMessage="yes"
+                           Timeout="10"
+                           TerminateProcess="0"
+                           RebootPrompt="no"
+                           Condition="NOT Installed OR REINSTALL OR REMOVE=&quot;ALL&quot; OR WIX_UPGRADE_DETECTED" />
+    <util:CloseApplication Id="CloseRobocopyDropAgent"
+                           Target="RobocopyDropAgent.exe"
+                           CloseMessage="yes"
+                           Timeout="10"
+                           TerminateProcess="1"
+                           RebootPrompt="no"
+                           Condition="NOT Installed OR REINSTALL OR REMOVE=&quot;ALL&quot; OR WIX_UPGRADE_DETECTED" />
+    <util:CloseApplication Id="CloseExplorerForShellExtension"
+                           Target="explorer.exe"
+                           EndSessionMessage="yes"
+                           Timeout="10"
+                           TerminateProcess="0"
+                           RebootPrompt="no"
+                           Condition="NOT Installed OR REINSTALL OR REMOVE=&quot;ALL&quot; OR WIX_UPGRADE_DETECTED" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Robocopy Drop" />
+    </StandardDirectory>
+
+    <!-- In per-user mode the package must not write under Program Files. -->
+    <SetDirectory Id="INSTALLFOLDER"
+                  Value="[LocalAppDataFolder]Programs\Robocopy Drop"
+                  Condition="MSIINSTALLPERUSER = 1"
+                  Sequence="both" />
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="PROGRAMMENUFOLDER" Name="Robocopy Drop" />
+    </StandardDirectory>
+
+    <Component Id="ApplicationFiles"
+               Directory="INSTALLFOLDER"
+               Guid="{E42DDC7A-7C5A-4E0E-9E4B-5D1FC8FA4B8F}"
+               Bitness="always64">
+      <File Id="RunnerExe"
+            Source="$(var.PayloadDir)\RobocopyDropRunner.exe"
+            KeyPath="yes"
+            Checksum="yes" />
+      <File Id="RunnerConfig" Source="$(var.PayloadDir)\RobocopyDropRunner.exe.config" />
+      <File Id="ExtensionDll" Source="$(var.ExtensionDll)" Checksum="yes" />
+      <File Id="VersionFile" Source="$(var.PayloadDir)\Version.txt" />
+      <File Id="GuideIt" Source="$(var.DocsDir)\GUIDA-IT.pdf" />
+      <File Id="GuideEn" Source="$(var.DocsDir)\GUIDE-EN.pdf" />
+      <File Id="LicenseText" Source="$(var.DocsDir)\LICENSE.txt" />
+    </Component>
+
+    <Component Id="ShellRegistration"
+               Directory="INSTALLFOLDER"
+               Guid="{A7AF4B61-BC05-429B-B028-D21BAC26E6AF}"
+               Bitness="always64">
+      <RegistryValue Root="HKCR"
+                     Key="CLSID\{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}"
+                     Value="$(var.HandlerDescription)"
+                     Type="string" />
+      <RegistryValue Root="HKCR"
+                     Key="CLSID\{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}\InprocServer32"
+                     Value="[#ExtensionDll]"
+                     Type="string"
+                     KeyPath="yes" />
+      <RegistryValue Root="HKCR"
+                     Key="CLSID\{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}\InprocServer32"
+                     Name="ThreadingModel"
+                     Value="Apartment"
+                     Type="string" />
+      <RegistryValue Root="HKCR"
+                     Key="Directory\shellex\DragDropHandlers\RobocopyDrop"
+                     Value="{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}"
+                     Type="string" />
+      <RegistryValue Root="HKCR"
+                     Key="Drive\shellex\DragDropHandlers\RobocopyDrop"
+                     Value="{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}"
+                     Type="string" />
+      <RegistryValue Root="HKCR"
+                     Key="Folder\shellex\DragDropHandlers\RobocopyDrop"
+                     Value="{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}"
+                     Type="string" />
+      <RegistryValue Root="HKMU"
+                     Key="Software\Microsoft\Windows\CurrentVersion\Shell Extensions\Approved"
+                     Name="{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}"
+                     Value="Robocopy Drop"
+                     Type="string" />
+      <RegistryValue Root="HKMU"
+                     Key="Software\RobocopyDrop"
+                     Name="DefaultLanguage"
+                     Value="$(var.UiLanguage)"
+                     Type="string" />
+    </Component>
+
+    <Component Id="ProgramMenuShortcuts"
+               Directory="PROGRAMMENUFOLDER"
+               Guid="{3B46E523-6B86-4AB5-AB05-44FDF7F40E1C}">
+      <Shortcut Id="SettingsShortcut"
+                Name="$(var.SettingsShortcutName)"
+                Description="$(var.SettingsShortcutDescription)"
+                Target="[#RunnerExe]"
+                Arguments="--settings"
+                WorkingDirectory="INSTALLFOLDER"
+                Icon="RobocopyDropIcon" />
+      <Shortcut Id="GuideShortcut"
+                Name="$(var.GuideShortcutName)"
+                Target="$(var.GuideTarget)"
+                WorkingDirectory="INSTALLFOLDER" />
+      <Shortcut Id="ReportsShortcut"
+                Name="$(var.ReportsShortcutName)"
+                Description="$(var.ReportsShortcutDescription)"
+                Target="[System64Folder]cmd.exe"
+                Arguments="/d /c if not exist &quot;%LOCALAPPDATA%\RobocopyDrop\Logs&quot; mkdir &quot;%LOCALAPPDATA%\RobocopyDrop\Logs&quot; &amp; start &quot;&quot; &quot;%LOCALAPPDATA%\RobocopyDrop\Logs&quot;"
+                Show="minimized"
+                Icon="RobocopyDropIcon" />
+      <Shortcut Id="UpdateShortcut"
+                Name="$(var.UpdateShortcutName)"
+                Description="$(var.UpdateShortcutDescription)"
+                Target="[#RunnerExe]"
+                Arguments="--check-updates"
+                WorkingDirectory="INSTALLFOLDER"
+                Icon="RobocopyDropIcon" />
+      <Shortcut Id="UninstallShortcut"
+                Name="$(var.UninstallShortcutName)"
+                Description="$(var.UninstallShortcutDescription)"
+                Target="[System64Folder]msiexec.exe"
+                Arguments="/x [ProductCode] /norestart"
+                Icon="RobocopyDropIcon" />
+      <RemoveFolder Id="RemoveProgramMenuFolder" On="uninstall" />
+      <RegistryValue Root="HKMU"
+                     Key="Software\RobocopyDrop\Installer"
+                     Name="Shortcuts"
+                     Value="5"
+                     Type="integer"
+                     KeyPath="yes" />
+    </Component>
+
+    <Component Id="LegacyRegistryCleanup"
+               Directory="INSTALLFOLDER"
+               Guid="{09B3D178-79BC-4375-A37E-1E58136CC914}">
+      <RemoveRegistryKey Id="RemoveOldManagedClsid"
+                         Root="HKCR"
+                         Key="CLSID\{7A1C7A42-3E9D-4B4F-9E64-2459BB1B972A}"
+                         Action="removeOnInstall" />
+      <RegistryValue Root="HKMU"
+                     Key="Software\RobocopyDrop\Installer"
+                     Name="Version"
+                     Value="$(var.ProductVersion)"
+                     Type="string"
+                     KeyPath="yes" />
+    </Component>
+
+    <CustomAction Id="RunnerSelfTest"
+                  FileRef="RunnerExe"
+                  ExeCommand="--self-test"
+                  Execute="deferred"
+                  Impersonate="yes"
+                  Return="check" />
+    <CustomAction Id="RestartExplorerCommit"
+                  Directory="WindowsFolder"
+                  ExeCommand="explorer.exe"
+                  Execute="commit"
+                  Impersonate="yes"
+                  Return="asyncNoWait" />
+    <CustomAction Id="RestartExplorerRollback"
+                  Directory="WindowsFolder"
+                  ExeCommand="explorer.exe"
+                  Execute="rollback"
+                  Impersonate="yes"
+                  Return="asyncNoWait" />
+
+    <InstallExecuteSequence>
+      <Custom Action="RunnerSelfTest"
+              After="InstallFiles"
+              Condition="NOT Installed OR REINSTALL OR WIX_UPGRADE_DETECTED" />
+      <Custom Action="RestartExplorerRollback"
+              Before="InstallFinalize"
+              Condition="NOT Installed OR REINSTALL OR REMOVE=&quot;ALL&quot; OR WIX_UPGRADE_DETECTED" />
+      <Custom Action="RestartExplorerCommit"
+              Before="InstallFinalize"
+              Condition="NOT Installed OR REINSTALL OR REMOVE=&quot;ALL&quot; OR WIX_UPGRADE_DETECTED" />
+    </InstallExecuteSequence>
+
+    <Feature Id="MainFeature" Title="Robocopy Drop" Level="1">
+      <ComponentRef Id="ApplicationFiles" />
+      <ComponentRef Id="ShellRegistration" />
+      <ComponentRef Id="ProgramMenuShortcuts" />
+      <ComponentRef Id="LegacyRegistryCleanup" />
+    </Feature>
+  </Package>
+</Wix>

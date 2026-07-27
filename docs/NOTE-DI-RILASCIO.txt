@@ -1,0 +1,33 @@
+ROBOCOPY DROP 1.6.0
+====================
+
+AGGIORNAMENTI GITHUB
+--------------------
+- Aggiunto controllo della release stabile piu recente su GitHub.
+- Check automatico massimo ogni 24 ore, senza agent residente.
+- Aggiunta voce manuale Controlla aggiornamenti Robocopy Drop.
+- Una copia o verifica attiva non viene interrotta.
+- L'utente conferma prima di scaricare e installare.
+- L'MSI viene validato tramite nome atteso, HTTPS, dimensione e SHA-256.
+- Supporto a firma Authenticode obbligatoria e pinning del thumbprint.
+- Windows Installer viene avviato in modalita passive senza riavvio automatico.
+
+DISTRIBUZIONE OPEN SOURCE
+-------------------------
+- Sostituita la precedente licenza pilot interna con MIT.
+- Aggiunti LICENSE, README.md, SECURITY.md, PRIVACY.md,
+  THIRD-PARTY-NOTICES.txt e .gitignore.
+- Aggiunto workflow GitHub Actions per build e pubblicazione da tag.
+- Aggiunto Configura-GitHub.cmd per incorporare owner/repository negli MSI.
+
+COMPATIBILITA
+-------------
+- Major Upgrade MSI dalla 1.5.2 con UpgradeCode invariato.
+- Linea Classic: nessun hotkey globale, agent residente o coda persistente.
+- Le correzioni di Annulla/Esc/X e la disinstallazione diretta restano attive.
+
+SICUREZZA RELEASE
+-----------------
+Per il canale pubblico e consigliato firmare tutti i binari e gli MSI con
+Authenticode, proteggere i segreti di firma e abilitare le release immutabili
+solo dopo aver convalidato il processo.

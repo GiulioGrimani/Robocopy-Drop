@@ -1,0 +1,19 @@
+WiX TOOLSET 6.0.2 - BUILD TOOL NOTICE
+=====================================
+
+This project restores WiX Toolset 6.0.2 from NuGet on the Windows build
+computer. WiX binaries are not distributed inside this source kit or inside
+Robocopy Drop.
+
+WiX Toolset participates in the Open Source Maintenance Fee (OSMF). Under the
+current WiX/FireGiant terms, organizations generating more than USD 10,000 in
+annual revenue are required to sponsor the wixtoolset GitHub organization.
+Terms may change. Review the current official WiX/FireGiant documentation
+before every organizational or commercial build.
+
+The local build script requires the operator to explicitly confirm that the
+applicable terms have been reviewed. The GitHub Actions workflow requires the
+repository variable WIX_OSMF_ACCEPTED=true.
+
+This notice is informational and is not a substitute for reviewing the actual
+WiX license and OSMF terms.

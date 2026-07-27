@@ -1,0 +1,20 @@
+THIRD-PARTY NOTICES
+===================
+
+Robocopy
+--------
+Robocopy is a component of Microsoft Windows. Robocopy Drop invokes the copy
+of robocopy.exe already installed with Windows and does not redistribute it.
+
+WiX Toolset
+------------
+WiX Toolset 6.0.2 is restored from NuGet on the build computer and is used
+only to create MSI packages. WiX binaries are not included in this source kit.
+WiX remains governed by its own license and Open Source Maintenance Fee terms.
+See docs/NOTICE-WIX.txt before building.
+
+Microsoft .NET Framework and Windows APIs
+-----------------------------------------
+Robocopy Drop targets Microsoft .NET Framework 4.8 and uses Windows APIs
+provided by the operating system. Those components are not redistributed by
+this project.
