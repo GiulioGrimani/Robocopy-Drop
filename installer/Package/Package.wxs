@@ -195,15 +195,13 @@
                      Type="string" />
     </Component>
 
-    <!-- Program-menu shortcuts are separated by installation context.
-         Both components use ProgramMenuFolder because Windows Installer
-         redirects it to the current-user or common Start menu according
-         to the selected installation context. -->
+    <!-- ProgramMenuFolder is redirected by Windows Installer according to
+         the selected installation context. Non-advertised shortcuts use one
+         context-neutral component with an HKCU registry KeyPath, as required
+         by the MSI ICE38/ICE43 validation rules. -->
     <Component Id="ProgramMenuShortcuts"
                Directory="RobocopyDropProgramMenuFolder"
-               Guid="{3B46E523-6B86-4AB5-AB05-44FDF7F40E1C}"
-               Condition="MSIINSTALLPERUSER = 1"
-               Transitive="yes">
+               Guid="{3B46E523-6B86-4AB5-AB05-44FDF7F40E1C}">
       <Shortcut Id="SettingsShortcut"
                 Name="$(var.SettingsShortcutName)"
                 Description="$(var.SettingsShortcutDescription)"
@@ -235,54 +233,8 @@
                 Target="[System64Folder]msiexec.exe"
                 Arguments="/x [ProductCode] /norestart"
                 Icon="RobocopyDropIcon" />
-      <RemoveFolder Id="RemoveUserProgramMenuFolder" On="uninstall" />
+      <RemoveFolder Id="RemoveProgramMenuFolder" On="uninstall" />
       <RegistryValue Root="HKCU"
-                     Key="Software\RobocopyDrop\Installer"
-                     Name="Shortcuts"
-                     Value="5"
-                     Type="integer"
-                     KeyPath="yes" />
-    </Component>
-
-    <Component Id="ProgramMenuShortcutsMachine"
-               Directory="RobocopyDropProgramMenuFolder"
-               Guid="{808DB2CF-07F8-443F-86B3-EDEEE5D31A50}"
-               Bitness="always64"
-               Condition="NOT MSIINSTALLPERUSER"
-               Transitive="yes">
-      <Shortcut Id="SettingsShortcutMachine"
-                Name="$(var.SettingsShortcutName)"
-                Description="$(var.SettingsShortcutDescription)"
-                Target="[INSTALLFOLDER]RobocopyDropRunner.exe"
-                Arguments="--settings"
-                WorkingDirectory="INSTALLFOLDER"
-                Icon="RobocopyDropIcon" />
-      <Shortcut Id="GuideShortcutMachine"
-                Name="$(var.GuideShortcutName)"
-                Target="$(var.GuideTarget)"
-                WorkingDirectory="INSTALLFOLDER" />
-      <Shortcut Id="ReportsShortcutMachine"
-                Name="$(var.ReportsShortcutName)"
-                Description="$(var.ReportsShortcutDescription)"
-                Target="[System64Folder]cmd.exe"
-                Arguments="/d /c if not exist &quot;%LOCALAPPDATA%\RobocopyDrop\Logs&quot; mkdir &quot;%LOCALAPPDATA%\RobocopyDrop\Logs&quot; &amp; start &quot;&quot; &quot;%LOCALAPPDATA%\RobocopyDrop\Logs&quot;"
-                Show="minimized"
-                Icon="RobocopyDropIcon" />
-      <Shortcut Id="UpdateShortcutMachine"
-                Name="$(var.UpdateShortcutName)"
-                Description="$(var.UpdateShortcutDescription)"
-                Target="[INSTALLFOLDER]RobocopyDropRunner.exe"
-                Arguments="--check-updates"
-                WorkingDirectory="INSTALLFOLDER"
-                Icon="RobocopyDropIcon" />
-      <Shortcut Id="UninstallShortcutMachine"
-                Name="$(var.UninstallShortcutName)"
-                Description="$(var.UninstallShortcutDescription)"
-                Target="[System64Folder]msiexec.exe"
-                Arguments="/x [ProductCode] /norestart"
-                Icon="RobocopyDropIcon" />
-      <RemoveFolder Id="RemoveMachineProgramMenuFolder" On="uninstall" />
-      <RegistryValue Root="HKLM"
                      Key="Software\RobocopyDrop\Installer"
                      Name="Shortcuts"
                      Value="5"
@@ -341,7 +293,6 @@
       <ComponentRef Id="ShellRegistration" />
       <ComponentRef Id="ShellRegistrationMachine" />
       <ComponentRef Id="ProgramMenuShortcuts" />
-      <ComponentRef Id="ProgramMenuShortcutsMachine" />
       <ComponentRef Id="LegacyRegistryCleanup" />
     </Feature>
   </Package>

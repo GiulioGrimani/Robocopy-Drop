@@ -555,16 +555,11 @@ try {
         [string]$shortcutById['ReportsShortcut'].Arguments -notmatch 'RobocopyDrop\\Logs') {
         throw 'La scorciatoia Report non apre la cartella LocalAppData\RobocopyDrop\Logs.'
     }
-    foreach ($updateShortcutId in @('UpdateShortcut','UpdateShortcutMachine')) {
-        if (-not $shortcutById.ContainsKey($updateShortcutId)) {
-            throw "Scorciatoia Start mancante nel progetto WiX: $updateShortcutId"
-        }
-        $updateTarget = [string]$shortcutById[$updateShortcutId].Target
-        $updateArguments = [string]$shortcutById[$updateShortcutId].Arguments
-        if ($updateTarget -notmatch '^(?:\[#RunnerExe\]|\[INSTALLFOLDER\]RobocopyDropRunner\.exe)$' -or
-            $updateArguments -notmatch '(?:^|\s)--check-updates(?:\s|$)') {
-            throw "La scorciatoia Aggiornamenti '$updateShortcutId' non avvia il runner con --check-updates."
-        }
+    $updateTarget = [string]$shortcutById['UpdateShortcut'].Target
+    $updateArguments = [string]$shortcutById['UpdateShortcut'].Arguments
+    if ($updateTarget -notmatch '^(?:\[#RunnerExe\]|\[INSTALLFOLDER\]RobocopyDropRunner\.exe)$' -or
+        $updateArguments -notmatch '(?:^|\s)--check-updates(?:\s|$)') {
+        throw "La scorciatoia Aggiornamenti non avvia il runner con --check-updates."
     }
 
     New-Item -ItemType Directory -Force -Path $buildRoot,$releaseDir,$stagingCommon,$logDir,$toolsDir,$packagesDir | Out-Null
