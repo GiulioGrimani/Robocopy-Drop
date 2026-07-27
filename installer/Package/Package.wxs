@@ -14,7 +14,6 @@
                         Manufacturer="$(var.Publisher)" />
 
     <MajorUpgrade DowngradeErrorMessage="$(var.DowngradeMessage)"
-                  AllowSameVersionUpgrades="yes"
                   IgnoreLanguage="yes"
                   Schedule="afterInstallInitialize" />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
@@ -84,7 +83,10 @@
                   Sequence="both" />
 
     <StandardDirectory Id="ProgramMenuFolder">
-      <Directory Id="PROGRAMMENUFOLDER" Name="Robocopy Drop" />
+      <Directory Id="RobocopyDropUserProgramMenuFolder" Name="Robocopy Drop" />
+    </StandardDirectory>
+    <StandardDirectory Id="CommonProgramsFolder">
+      <Directory Id="RobocopyDropMachineProgramMenuFolder" Name="Robocopy Drop" />
     </StandardDirectory>
 
     <Component Id="ApplicationFiles"
@@ -103,55 +105,108 @@
       <File Id="LicenseText" Source="$(var.DocsDir)\LICENSE.txt" />
     </Component>
 
+    <!-- Keep per-user and per-machine registry data in separate
+         components. ICE57 rejects components that mix the two contexts. -->
     <Component Id="ShellRegistration"
                Directory="INSTALLFOLDER"
                Guid="{A7AF4B61-BC05-429B-B028-D21BAC26E6AF}"
-               Bitness="always64">
-      <RegistryValue Root="HKCR"
-                     Key="CLSID\{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}"
+               Bitness="always64"
+               Condition="MSIINSTALLPERUSER = 1"
+               Transitive="yes">
+      <RegistryValue Root="HKCU"
+                     Key="Software\Classes\CLSID\{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}"
                      Value="$(var.HandlerDescription)"
                      Type="string" />
-      <RegistryValue Root="HKCR"
-                     Key="CLSID\{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}\InprocServer32"
-                     Value="[#ExtensionDll]"
+      <RegistryValue Root="HKCU"
+                     Key="Software\Classes\CLSID\{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}\InprocServer32"
+                     Value="[INSTALLFOLDER]RobocopyDropExtension.dll"
                      Type="string"
                      KeyPath="yes" />
-      <RegistryValue Root="HKCR"
-                     Key="CLSID\{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}\InprocServer32"
+      <RegistryValue Root="HKCU"
+                     Key="Software\Classes\CLSID\{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}\InprocServer32"
                      Name="ThreadingModel"
                      Value="Apartment"
                      Type="string" />
-      <RegistryValue Root="HKCR"
-                     Key="Directory\shellex\DragDropHandlers\RobocopyDrop"
+      <RegistryValue Root="HKCU"
+                     Key="Software\Classes\Directory\shellex\DragDropHandlers\RobocopyDrop"
                      Value="{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}"
                      Type="string" />
-      <RegistryValue Root="HKCR"
-                     Key="Drive\shellex\DragDropHandlers\RobocopyDrop"
+      <RegistryValue Root="HKCU"
+                     Key="Software\Classes\Drive\shellex\DragDropHandlers\RobocopyDrop"
                      Value="{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}"
                      Type="string" />
-      <RegistryValue Root="HKCR"
-                     Key="Folder\shellex\DragDropHandlers\RobocopyDrop"
+      <RegistryValue Root="HKCU"
+                     Key="Software\Classes\Folder\shellex\DragDropHandlers\RobocopyDrop"
                      Value="{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}"
                      Type="string" />
-      <RegistryValue Root="HKMU"
+      <RegistryValue Root="HKCU"
                      Key="Software\Microsoft\Windows\CurrentVersion\Shell Extensions\Approved"
                      Name="{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}"
                      Value="Robocopy Drop"
                      Type="string" />
-      <RegistryValue Root="HKMU"
+      <RegistryValue Root="HKCU"
                      Key="Software\RobocopyDrop"
                      Name="DefaultLanguage"
                      Value="$(var.UiLanguage)"
                      Type="string" />
     </Component>
 
+    <Component Id="ShellRegistrationMachine"
+               Directory="INSTALLFOLDER"
+               Guid="{D918840A-D386-4F23-A6D9-40F7710483ED}"
+               Bitness="always64"
+               Condition="NOT MSIINSTALLPERUSER"
+               Transitive="yes">
+      <RegistryValue Root="HKLM"
+                     Key="Software\Classes\CLSID\{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}"
+                     Value="$(var.HandlerDescription)"
+                     Type="string" />
+      <RegistryValue Root="HKLM"
+                     Key="Software\Classes\CLSID\{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}\InprocServer32"
+                     Value="[INSTALLFOLDER]RobocopyDropExtension.dll"
+                     Type="string"
+                     KeyPath="yes" />
+      <RegistryValue Root="HKLM"
+                     Key="Software\Classes\CLSID\{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}\InprocServer32"
+                     Name="ThreadingModel"
+                     Value="Apartment"
+                     Type="string" />
+      <RegistryValue Root="HKLM"
+                     Key="Software\Classes\Directory\shellex\DragDropHandlers\RobocopyDrop"
+                     Value="{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}"
+                     Type="string" />
+      <RegistryValue Root="HKLM"
+                     Key="Software\Classes\Drive\shellex\DragDropHandlers\RobocopyDrop"
+                     Value="{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}"
+                     Type="string" />
+      <RegistryValue Root="HKLM"
+                     Key="Software\Classes\Folder\shellex\DragDropHandlers\RobocopyDrop"
+                     Value="{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}"
+                     Type="string" />
+      <RegistryValue Root="HKLM"
+                     Key="Software\Microsoft\Windows\CurrentVersion\Shell Extensions\Approved"
+                     Name="{9F3D1E49-A465-4D4D-B570-25EC4D7F4D23}"
+                     Value="Robocopy Drop"
+                     Type="string" />
+      <RegistryValue Root="HKLM"
+                     Key="Software\RobocopyDrop"
+                     Name="DefaultLanguage"
+                     Value="$(var.UiLanguage)"
+                     Type="string" />
+    </Component>
+
+    <!-- Program-menu shortcuts are also separated by installation
+         context. The per-user component writes HKCU and the per-machine
+         component writes HKLM/CommonProgramsFolder. -->
     <Component Id="ProgramMenuShortcuts"
-               Directory="PROGRAMMENUFOLDER"
-               Guid="{3B46E523-6B86-4AB5-AB05-44FDF7F40E1C}">
+               Directory="RobocopyDropUserProgramMenuFolder"
+               Guid="{3B46E523-6B86-4AB5-AB05-44FDF7F40E1C}"
+               Condition="MSIINSTALLPERUSER = 1"
+               Transitive="yes">
       <Shortcut Id="SettingsShortcut"
                 Name="$(var.SettingsShortcutName)"
                 Description="$(var.SettingsShortcutDescription)"
-                Target="[#RunnerExe]"
+                Target="[INSTALLFOLDER]RobocopyDropRunner.exe"
                 Arguments="--settings"
                 WorkingDirectory="INSTALLFOLDER"
                 Icon="RobocopyDropIcon" />
@@ -169,7 +224,7 @@
       <Shortcut Id="UpdateShortcut"
                 Name="$(var.UpdateShortcutName)"
                 Description="$(var.UpdateShortcutDescription)"
-                Target="[#RunnerExe]"
+                Target="[INSTALLFOLDER]RobocopyDropRunner.exe"
                 Arguments="--check-updates"
                 WorkingDirectory="INSTALLFOLDER"
                 Icon="RobocopyDropIcon" />
@@ -179,8 +234,54 @@
                 Target="[System64Folder]msiexec.exe"
                 Arguments="/x [ProductCode] /norestart"
                 Icon="RobocopyDropIcon" />
-      <RemoveFolder Id="RemoveProgramMenuFolder" On="uninstall" />
-      <RegistryValue Root="HKMU"
+      <RemoveFolder Id="RemoveUserProgramMenuFolder" On="uninstall" />
+      <RegistryValue Root="HKCU"
+                     Key="Software\RobocopyDrop\Installer"
+                     Name="Shortcuts"
+                     Value="5"
+                     Type="integer"
+                     KeyPath="yes" />
+    </Component>
+
+    <Component Id="ProgramMenuShortcutsMachine"
+               Directory="RobocopyDropMachineProgramMenuFolder"
+               Guid="{808DB2CF-07F8-443F-86B3-EDEEE5D31A50}"
+               Bitness="always64"
+               Condition="NOT MSIINSTALLPERUSER"
+               Transitive="yes">
+      <Shortcut Id="SettingsShortcutMachine"
+                Name="$(var.SettingsShortcutName)"
+                Description="$(var.SettingsShortcutDescription)"
+                Target="[INSTALLFOLDER]RobocopyDropRunner.exe"
+                Arguments="--settings"
+                WorkingDirectory="INSTALLFOLDER"
+                Icon="RobocopyDropIcon" />
+      <Shortcut Id="GuideShortcutMachine"
+                Name="$(var.GuideShortcutName)"
+                Target="$(var.GuideTarget)"
+                WorkingDirectory="INSTALLFOLDER" />
+      <Shortcut Id="ReportsShortcutMachine"
+                Name="$(var.ReportsShortcutName)"
+                Description="$(var.ReportsShortcutDescription)"
+                Target="[System64Folder]cmd.exe"
+                Arguments="/d /c if not exist &quot;%LOCALAPPDATA%\RobocopyDrop\Logs&quot; mkdir &quot;%LOCALAPPDATA%\RobocopyDrop\Logs&quot; &amp; start &quot;&quot; &quot;%LOCALAPPDATA%\RobocopyDrop\Logs&quot;"
+                Show="minimized"
+                Icon="RobocopyDropIcon" />
+      <Shortcut Id="UpdateShortcutMachine"
+                Name="$(var.UpdateShortcutName)"
+                Description="$(var.UpdateShortcutDescription)"
+                Target="[INSTALLFOLDER]RobocopyDropRunner.exe"
+                Arguments="--check-updates"
+                WorkingDirectory="INSTALLFOLDER"
+                Icon="RobocopyDropIcon" />
+      <Shortcut Id="UninstallShortcutMachine"
+                Name="$(var.UninstallShortcutName)"
+                Description="$(var.UninstallShortcutDescription)"
+                Target="[System64Folder]msiexec.exe"
+                Arguments="/x [ProductCode] /norestart"
+                Icon="RobocopyDropIcon" />
+      <RemoveFolder Id="RemoveMachineProgramMenuFolder" On="uninstall" />
+      <RegistryValue Root="HKLM"
                      Key="Software\RobocopyDrop\Installer"
                      Name="Shortcuts"
                      Value="5"
@@ -237,7 +338,9 @@
     <Feature Id="MainFeature" Title="Robocopy Drop" Level="1">
       <ComponentRef Id="ApplicationFiles" />
       <ComponentRef Id="ShellRegistration" />
+      <ComponentRef Id="ShellRegistrationMachine" />
       <ComponentRef Id="ProgramMenuShortcuts" />
+      <ComponentRef Id="ProgramMenuShortcutsMachine" />
       <ComponentRef Id="LegacyRegistryCleanup" />
     </Feature>
   </Package>

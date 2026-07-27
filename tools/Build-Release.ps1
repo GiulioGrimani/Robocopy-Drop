@@ -360,7 +360,7 @@ function Get-LanguageProperties([string]$Language) {
             SettingsShortcutName='Robocopy Drop Settings';
             SettingsShortcutDescription='Configure language, automatic media profile, and Robocopy threads';
             GuideShortcutName='Robocopy Drop Guide';
-            GuideTarget='[#GuideEn]';
+            GuideTarget='[INSTALLFOLDER]GUIDE-EN.pdf';
             ReportsShortcutName='Open Robocopy Drop Reports';
             ReportsShortcutDescription='Open the folder containing saved Robocopy Drop reports';
             UpdateShortcutName='Check for Robocopy Drop Updates';
@@ -380,7 +380,7 @@ function Get-LanguageProperties([string]$Language) {
         SettingsShortcutName='Impostazioni Robocopy Drop';
         SettingsShortcutDescription='Configura lingua, profilo automatico e thread Robocopy';
         GuideShortcutName='Guida Robocopy Drop';
-        GuideTarget='[#GuideIt]';
+        GuideTarget='[INSTALLFOLDER]GUIDA-IT.pdf';
         ReportsShortcutName='Apri cartella report';
         ReportsShortcutDescription='Apre la cartella contenente i report salvati da Robocopy Drop';
         UpdateShortcutName='Controlla aggiornamenti Robocopy Drop';
