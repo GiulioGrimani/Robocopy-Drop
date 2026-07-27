@@ -514,6 +514,12 @@ try {
         throw "Il percorso del kit contiene uno dei caratteri non supportati dalla toolchain (; , ' %). Sposta il kit in un percorso semplice, ad esempio C:\Build\RobocopyDrop."
     }
 
+    # Create the diagnostic log before all preflight checks. This guarantees
+    # that GitHub Actions can upload a useful log even when validation fails
+    # before the compiler or WiX is invoked.
+    New-Item -ItemType Directory -Force -Path $buildRoot,$logDir | Out-Null
+    "Build Robocopy Drop $Version - $(Get-Date -Format o)" | Set-Content -LiteralPath $logPath -Encoding UTF8
+
     foreach ($required in @($packageProject,$nugetConfig,
         (Join-Path $payloadDir 'it\RobocopyDropExtension.dll'),
         (Join-Path $payloadDir 'en\RobocopyDropExtension.dll'),
@@ -549,16 +555,22 @@ try {
         [string]$shortcutById['ReportsShortcut'].Arguments -notmatch 'RobocopyDrop\\Logs') {
         throw 'La scorciatoia Report non apre la cartella LocalAppData\RobocopyDrop\Logs.'
     }
-    if ([string]$shortcutById['UpdateShortcut'].Target -notmatch '#RunnerExe' -or
-        [string]$shortcutById['UpdateShortcut'].Arguments -notmatch '--check-updates') {
-        throw 'La scorciatoia Aggiornamenti non avvia il runner con --check-updates.'
+    foreach ($updateShortcutId in @('UpdateShortcut','UpdateShortcutMachine')) {
+        if (-not $shortcutById.ContainsKey($updateShortcutId)) {
+            throw "Scorciatoia Start mancante nel progetto WiX: $updateShortcutId"
+        }
+        $updateTarget = [string]$shortcutById[$updateShortcutId].Target
+        $updateArguments = [string]$shortcutById[$updateShortcutId].Arguments
+        if ($updateTarget -notmatch '^(?:\[#RunnerExe\]|\[INSTALLFOLDER\]RobocopyDropRunner\.exe)$' -or
+            $updateArguments -notmatch '(?:^|\s)--check-updates(?:\s|$)') {
+            throw "La scorciatoia Aggiornamenti '$updateShortcutId' non avvia il runner con --check-updates."
+        }
     }
 
     New-Item -ItemType Directory -Force -Path $buildRoot,$releaseDir,$stagingCommon,$logDir,$toolsDir,$packagesDir | Out-Null
     Get-ChildItem -LiteralPath $releaseDir -Force -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force
     if (Test-Path -LiteralPath $stagingDir) { Remove-Item -LiteralPath $stagingDir -Recurse -Force }
     New-Item -ItemType Directory -Force -Path $stagingCommon,(Split-Path $stagingItDll -Parent),(Split-Path $stagingEnDll -Parent),$logDir | Out-Null
-    "Build Robocopy Drop $Version - $(Get-Date -Format o)" | Set-Content -LiteralPath $logPath -Encoding UTF8
 
     if (-not $AcceptWixTerms) {
         if ($NonInteractive) { throw 'Passa -AcceptWixTerms dopo aver verificato NOTICE-WIX.txt e i termini OSMF.' }

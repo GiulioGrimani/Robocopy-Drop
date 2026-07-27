@@ -98,6 +98,17 @@ jobs:
             throw "Build failed with exit code $LASTEXITCODE"
           }
 
+      - name: Upload diagnostic logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: Robocopy-Drop-build-logs-${{ steps.version.outputs.version }}
+          path: |
+            build/logs/**
+            build/*.props
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v7
         with:
