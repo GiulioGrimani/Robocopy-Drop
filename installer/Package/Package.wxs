@@ -82,11 +82,11 @@
                   Condition="MSIINSTALLPERUSER = 1"
                   Sequence="both" />
 
+    <!-- ProgramMenuFolder is redirected automatically by Windows Installer:
+         current-user Start menu for a per-user installation, common Start menu
+         when ALLUSERS selects a per-machine installation. -->
     <StandardDirectory Id="ProgramMenuFolder">
-      <Directory Id="RobocopyDropUserProgramMenuFolder" Name="Robocopy Drop" />
-    </StandardDirectory>
-    <StandardDirectory Id="CommonProgramsFolder">
-      <Directory Id="RobocopyDropMachineProgramMenuFolder" Name="Robocopy Drop" />
+      <Directory Id="RobocopyDropProgramMenuFolder" Name="Robocopy Drop" />
     </StandardDirectory>
 
     <Component Id="ApplicationFiles"
@@ -195,11 +195,12 @@
                      Type="string" />
     </Component>
 
-    <!-- Program-menu shortcuts are also separated by installation
-         context. The per-user component writes HKCU and the per-machine
-         component writes HKLM/CommonProgramsFolder. -->
+    <!-- Program-menu shortcuts are separated by installation context.
+         Both components use ProgramMenuFolder because Windows Installer
+         redirects it to the current-user or common Start menu according
+         to the selected installation context. -->
     <Component Id="ProgramMenuShortcuts"
-               Directory="RobocopyDropUserProgramMenuFolder"
+               Directory="RobocopyDropProgramMenuFolder"
                Guid="{3B46E523-6B86-4AB5-AB05-44FDF7F40E1C}"
                Condition="MSIINSTALLPERUSER = 1"
                Transitive="yes">
@@ -244,7 +245,7 @@
     </Component>
 
     <Component Id="ProgramMenuShortcutsMachine"
-               Directory="RobocopyDropMachineProgramMenuFolder"
+               Directory="RobocopyDropProgramMenuFolder"
                Guid="{808DB2CF-07F8-443F-86B3-EDEEE5D31A50}"
                Bitness="always64"
                Condition="NOT MSIINSTALLPERUSER"
