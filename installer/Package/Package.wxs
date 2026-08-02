@@ -39,6 +39,7 @@
     <Property Id="ARPPRODUCTICON" Value="RobocopyDropIcon" />
     <Property Id="ARPCOMMENTS" Value="$(var.ProductDescription)" />
     <Property Id="DISABLEADVTSHORTCUTS" Value="1" />
+    <Property Id="ROBOCOPYDROP_EXTERNAL_EXPLORER_RESTART" Secure="yes" />
 
     <!-- Running Robocopy Drop processes need closing only when an existing
          installation is being repaired, upgraded or removed. A clean first
@@ -284,10 +285,10 @@
     <InstallExecuteSequence>
       <Custom Action="RestartExplorerRollback"
               Before="InstallFinalize"
-              Condition="REINSTALL OR REMOVE=&quot;ALL&quot; OR WIX_UPGRADE_DETECTED" />
+              Condition="(REINSTALL OR REMOVE=&quot;ALL&quot; OR WIX_UPGRADE_DETECTED) AND NOT ROBOCOPYDROP_EXTERNAL_EXPLORER_RESTART" />
       <Custom Action="RestartExplorerCommit"
               Before="InstallFinalize"
-              Condition="REINSTALL OR REMOVE=&quot;ALL&quot; OR WIX_UPGRADE_DETECTED" />
+              Condition="(REINSTALL OR REMOVE=&quot;ALL&quot; OR WIX_UPGRADE_DETECTED) AND NOT ROBOCOPYDROP_EXTERNAL_EXPLORER_RESTART" />
     </InstallExecuteSequence>
 
     <Feature Id="MainFeature" Title="Robocopy Drop" Level="1">

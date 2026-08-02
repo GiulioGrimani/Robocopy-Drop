@@ -1068,6 +1068,201 @@ namespace RobocopyDrop
         public string SignerSubject;
     }
 
+    internal static class ExplorerSessionCoordinator
+    {
+        private const string ExternalRestartProperty =
+            "ROBOCOPYDROP_EXTERNAL_EXPLORER_RESTART=1";
+
+        public static void StartInstallerAndRestoreFolders(
+            string installerArguments)
+        {
+            if (string.IsNullOrWhiteSpace(installerArguments))
+                throw new ArgumentException("installerArguments");
+
+            List<string> paths = CaptureOpenFolderPaths();
+            string statePath = Path.Combine(
+                Path.GetTempPath(),
+                "RobocopyDrop-Explorer-" + Guid.NewGuid().ToString("N") + ".txt");
+
+            File.WriteAllLines(
+                statePath,
+                paths.ToArray(),
+                new UTF8Encoding(true));
+
+            string fullArguments = installerArguments + " " + ExternalRestartProperty;
+            string script = BuildPowerShellScript(statePath, fullArguments);
+            string encodedCommand = Convert.ToBase64String(
+                Encoding.Unicode.GetBytes(script));
+
+            string powerShell = Path.Combine(
+                Environment.SystemDirectory,
+                "WindowsPowerShell",
+                "v1.0",
+                "powershell.exe");
+
+            if (!File.Exists(powerShell))
+                throw new FileNotFoundException(
+                    "Windows PowerShell non trovato.",
+                    powerShell);
+
+            ProcessStartInfo information = new ProcessStartInfo();
+            information.FileName = powerShell;
+            information.Arguments =
+                "-NoProfile -NonInteractive -ExecutionPolicy Bypass " +
+                "-WindowStyle Hidden -EncodedCommand " + encodedCommand;
+            information.UseShellExecute = false;
+            information.CreateNoWindow = true;
+
+            try
+            {
+                Process process = Process.Start(information);
+                if (process == null)
+                    throw new InvalidOperationException(
+                        "Impossibile avviare il coordinatore di Windows Installer.");
+                process.Dispose();
+            }
+            catch
+            {
+                try { File.Delete(statePath); } catch { }
+                throw;
+            }
+        }
+
+        private static List<string> CaptureOpenFolderPaths()
+        {
+            List<string> paths = new List<string>();
+            object shell = null;
+            object windows = null;
+
+            try
+            {
+                Type shellType = Type.GetTypeFromProgID("Shell.Application");
+                if (shellType == null) return paths;
+
+                shell = Activator.CreateInstance(shellType);
+                windows = shellType.InvokeMember(
+                    "Windows",
+                    BindingFlags.InvokeMethod,
+                    null,
+                    shell,
+                    null);
+
+                if (windows == null) return paths;
+
+                Type windowsType = windows.GetType();
+                int count = Convert.ToInt32(
+                    windowsType.InvokeMember(
+                        "Count",
+                        BindingFlags.GetProperty,
+                        null,
+                        windows,
+                        null),
+                    CultureInfo.InvariantCulture);
+
+                for (int index = 0; index < count; index++)
+                {
+                    object window = null;
+                    try
+                    {
+                        window = windowsType.InvokeMember(
+                            "Item",
+                            BindingFlags.InvokeMethod,
+                            null,
+                            windows,
+                            new object[] { index });
+
+                        if (window == null) continue;
+
+                        string locationUrl = Convert.ToString(
+                            window.GetType().InvokeMember(
+                                "LocationURL",
+                                BindingFlags.GetProperty,
+                                null,
+                                window,
+                                null),
+                            CultureInfo.InvariantCulture);
+
+                        Uri location;
+                        if (string.IsNullOrWhiteSpace(locationUrl) ||
+                            !Uri.TryCreate(locationUrl, UriKind.Absolute, out location) ||
+                            !location.IsFile)
+                            continue;
+
+                        string path = location.LocalPath;
+                        if (!string.IsNullOrWhiteSpace(path) &&
+                            Directory.Exists(path))
+                            paths.Add(path);
+                    }
+                    catch
+                    {
+                    }
+                    finally
+                    {
+                        ReleaseComObject(window);
+                    }
+                }
+            }
+            catch
+            {
+            }
+            finally
+            {
+                ReleaseComObject(windows);
+                ReleaseComObject(shell);
+            }
+
+            return paths;
+        }
+
+        private static string BuildPowerShellScript(
+            string statePath,
+            string installerArguments)
+        {
+            string stateLiteral = EscapePowerShellLiteral(statePath);
+            string argumentsLiteral = EscapePowerShellLiteral(installerArguments);
+
+            StringBuilder script = new StringBuilder();
+            script.Append("$ErrorActionPreference='SilentlyContinue';");
+            script.Append("$state='").Append(stateLiteral).Append("';");
+            script.Append("$arguments='").Append(argumentsLiteral).Append("';");
+            script.Append("$msi=Join-Path $env:SystemRoot 'System32\\msiexec.exe';");
+            script.Append("$explorer=Join-Path $env:SystemRoot 'explorer.exe';");
+            script.Append("$result=Start-Process -FilePath $msi -ArgumentList $arguments ");
+            script.Append("-Wait -PassThru;");
+            script.Append("$paths=@();");
+            script.Append("if(Test-Path -LiteralPath $state){");
+            script.Append("$paths=@(Get-Content -LiteralPath $state -Encoding UTF8 | ");
+            script.Append("Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and ");
+            script.Append("(Test-Path -LiteralPath $_ -PathType Container) });}");
+            script.Append("$explorerProcess=Get-Process explorer -ErrorAction SilentlyContinue;");
+            script.Append("if($paths.Count -gt 0){");
+            script.Append("Start-Process -FilePath $explorer -ArgumentList ");
+            script.Append("('\"'+$paths[0]+'\"');");
+            script.Append("Start-Sleep -Milliseconds 700;");
+            script.Append("for($index=1;$index -lt $paths.Count;$index++){");
+            script.Append("Start-Process -FilePath $explorer -ArgumentList ");
+            script.Append("('\"'+$paths[$index]+'\"');");
+            script.Append("Start-Sleep -Milliseconds 200;}");
+            script.Append("}elseif(-not $explorerProcess){");
+            script.Append("Start-Process -FilePath $explorer;}");
+            script.Append("Remove-Item -LiteralPath $state -Force -ErrorAction SilentlyContinue;");
+            script.Append("exit $result.ExitCode;");
+            return script.ToString();
+        }
+
+        private static string EscapePowerShellLiteral(string value)
+        {
+            return (value ?? string.Empty).Replace("'", "''");
+        }
+
+        private static void ReleaseComObject(object value)
+        {
+            if (value == null || !Marshal.IsComObject(value)) return;
+            try { Marshal.FinalReleaseComObject(value); }
+            catch { }
+        }
+    }
+
     internal static class UpdateManager
     {
         private const string RegistryPath = "HKEY_CURRENT_USER\\Software\\RobocopyDrop";
@@ -1292,11 +1487,9 @@ namespace RobocopyDrop
 
         public static void StartInstaller(string msiPath)
         {
-            ProcessStartInfo information = new ProcessStartInfo();
-            information.FileName = Path.Combine(Environment.SystemDirectory, "msiexec.exe");
-            information.Arguments = "/i " + PathHelpers.QuoteArgument(msiPath) + " /passive /norestart";
-            information.UseShellExecute = true;
-            Process.Start(information);
+            ExplorerSessionCoordinator.StartInstallerAndRestoreFolders(
+                "/i " + PathHelpers.QuoteArgument(msiPath) +
+                " /passive /norestart");
         }
 
         public static bool RunSelfTest()
@@ -4059,12 +4252,9 @@ namespace RobocopyDrop
             {
                 Thread.Sleep(250);
 
-                ProcessStartInfo information = new ProcessStartInfo();
-                information.FileName = Path.Combine(Environment.SystemDirectory, "msiexec.exe");
-                information.Arguments = "/x " + parsedProductCode.ToString("B") +
-                    " /passive /norestart";
-                information.UseShellExecute = true;
-                Process.Start(information);
+                ExplorerSessionCoordinator.StartInstallerAndRestoreFolders(
+                    "/x " + parsedProductCode.ToString("B") +
+                    " /passive /norestart");
                 return 0;
             }
             catch (Exception ex)

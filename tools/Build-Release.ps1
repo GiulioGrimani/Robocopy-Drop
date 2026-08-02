@@ -551,6 +551,31 @@ try {
         [string]$shortcutById['UninstallShortcut'].Arguments -notmatch '--uninstall\s+\[ProductCode\]') {
         throw 'La scorciatoia Disinstalla non avvia il runner con --uninstall [ProductCode].'
     }
+
+    $externalRestartProperty = @($packageXml.SelectNodes("//*[local-name()='Property']")) |
+        Where-Object {
+            [string]$_.Id -eq 'ROBOCOPYDROP_EXTERNAL_EXPLORER_RESTART'
+        } |
+        Select-Object -First 1
+    if ($null -eq $externalRestartProperty -or
+        [string]$externalRestartProperty.Secure -ne 'yes') {
+        throw 'La proprietà MSI per il ripristino esterno di Explorer è mancante o non sicura.'
+    }
+
+    $restartActions = @($packageXml.SelectNodes(
+        "//*[local-name()='InstallExecuteSequence']/*[local-name()='Custom']"
+    )) | Where-Object {
+        [string]$_.Action -in @(
+            'RestartExplorerRollback',
+            'RestartExplorerCommit'
+        )
+    }
+    if ($restartActions.Count -ne 2 -or
+        @($restartActions | Where-Object {
+            [string]$_.Condition -notmatch 'ROBOCOPYDROP_EXTERNAL_EXPLORER_RESTART'
+        }).Count -ne 0) {
+        throw 'Le azioni di riavvio Explorer non rispettano il coordinatore esterno.'
+    }
     if ([string]$shortcutById['GuideShortcut'].Target -notmatch 'RobocopyDropRunner\.exe$' -or
         [string]$shortcutById['GuideShortcut'].Arguments -notmatch '--open-guide') {
         throw 'La scorciatoia Guida non avvia il runner con --open-guide.'
@@ -606,6 +631,11 @@ try {
         $runnerSourceText -notmatch '--check-updates' -or
         $runnerSourceText -notmatch 'BeginAutomaticUpdateCheck') {
         throw 'Funzioni di aggiornamento GitHub non rilevate nel sorgente del runner.'
+    }
+    if ($runnerSourceText -notmatch 'ExplorerSessionCoordinator' -or
+        $runnerSourceText -notmatch 'Shell\.Application' -or
+        $runnerSourceText -notmatch 'ROBOCOPYDROP_EXTERNAL_EXPLORER_RESTART=1') {
+        throw 'Coordinamento delle finestre di Esplora file non rilevato nel runner.'
     }
 
     $assemblyVersion = $Version + '.0'
