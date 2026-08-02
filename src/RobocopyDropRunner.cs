@@ -3845,7 +3845,7 @@ namespace RobocopyDrop
             if (closeAfterCancel) Close();
         }
 
-        private void ApplyFatalLayout()
+        private void ApplyFatalLayout(string message)
         {
             Color errorColor = ErrorAccentColor();
 
@@ -3855,6 +3855,10 @@ namespace RobocopyDrop
             percentLabel.Visible = false;
             speedLabel.Visible = false;
             etaLabel.Visible = false;
+            updateLink.Visible = false;
+            openDestinationButton.Visible = false;
+            verifyButton.Visible = false;
+            retryButton.Visible = false;
 
             titleLabel.Font = new Font(
                 Font.FontFamily,
@@ -3862,8 +3866,6 @@ namespace RobocopyDrop
                 FontStyle.Bold);
             titleLabel.ForeColor = errorColor;
 
-            currentLabel.Location = new Point(24, 82);
-            currentLabel.Size = new Size(710, 78);
             currentLabel.AutoEllipsis = false;
             currentLabel.UseMnemonic = false;
             currentLabel.Font = new Font(
@@ -3873,20 +3875,47 @@ namespace RobocopyDrop
             currentLabel.ForeColor = errorColor;
             currentLabel.BackColor = StatusBackgroundColor(false, false);
             currentLabel.BorderStyle = BorderStyle.FixedSingle;
-            currentLabel.Padding = new Padding(10, 10, 10, 0);
+            currentLabel.Image = SystemIcons.Error.ToBitmap();
+            currentLabel.ImageAlign = ContentAlignment.MiddleLeft;
+            currentLabel.TextAlign = ContentAlignment.MiddleLeft;
+            currentLabel.Padding = new Padding(48, 8, 12, 8);
 
-            remainingLabel.Location = new Point(24, 168);
-            remainingLabel.Size = new Size(710, 42);
-            remainingLabel.ForeColor = NormalTextColor();
+            Size measured = TextRenderer.MeasureText(
+                message ?? string.Empty,
+                currentLabel.Font,
+                new Size(638, 0),
+                TextFormatFlags.WordBreak | TextFormatFlags.NoPadding);
+            int cardHeight = Math.Max(
+                54,
+                Math.Min(96, measured.Height + 20));
+
+            currentLabel.Location = new Point(24, 76);
+            currentLabel.Size = new Size(710, cardHeight);
+
+            remainingLabel.AutoEllipsis = false;
+            remainingLabel.TextAlign = ContentAlignment.MiddleLeft;
+            remainingLabel.Location = new Point(
+                24,
+                currentLabel.Bottom + 10);
+            remainingLabel.Size = new Size(710, 28);
+            remainingLabel.ForeColor = SystemColors.GrayText;
+
+            int actionsTop = remainingLabel.Bottom + 22;
+            detailsButton.Location = new Point(24, actionsTop);
+            copySummaryButton.Location = new Point(316, actionsTop);
+            saveReportButton.Location = new Point(458, actionsTop);
+            cancelCloseButton.Location = new Point(
+                614,
+                actionsTop + 58);
         }
 
         private void FinishFatal(string title, string message)
         {
             running = false;
             finishedAt = DateTime.Now;
-            ApplyFatalLayout();
             titleLabel.Text = title;
             currentLabel.Text = message;
+            ApplyFatalLayout(message);
             remainingLabel.Text = UiText.T("Consulta Piu dettagli per informazioni tecniche.");
             speedLabel.Text = "";
             etaLabel.Text = "";

@@ -639,8 +639,10 @@ try {
     }
     if ($runnerSourceText -notmatch 'MakeUniqueCopyPath' -or
         $runnerSourceText -notmatch 'UseNativeCopy' -or
-        $runnerSourceText -notmatch 'ApplyFatalLayout') {
-        throw 'Duplicazione nella stessa cartella o nuovo layout errori non rilevati nel runner.'
+        $runnerSourceText -notmatch 'ApplyFatalLayout\(string\s+message\)' -or
+        $runnerSourceText -notmatch 'TextRenderer\.MeasureText' -or
+        $runnerSourceText -notmatch 'SystemIcons\.Error\.ToBitmap') {
+        throw 'Duplicazione nella stessa cartella o layout compatto degli errori non rilevati nel runner.'
     }
     if ($runnerSourceText -notmatch 'PBM_SETSTATE' -or
         $runnerSourceText -notmatch 'ApplyOutcomeVisuals' -or
