@@ -595,8 +595,13 @@ try {
         $runnerSourceText -notmatch 'Close\s*\(\s*\)\s*;') {
         throw 'Fix Annulla impostazioni non rilevato nel sorgente del runner.'
     }
+    # Regression guard for the GitHub updater. The updater intentionally uses
+    # the releases collection instead of /releases/latest, so an empty public
+    # repository can be reported as "no published release" rather than as a
+    # technical HTTP 404 error.
     if ($runnerSourceText -notmatch 'internal\s+static\s+class\s+UpdateManager' -or
-        $runnerSourceText -notmatch 'releases/latest' -or
+        $runnerSourceText -notmatch '/releases\?per_page=\d+' -or
+        $runnerSourceText -notmatch 'NoPublishedRelease' -or
         $runnerSourceText -notmatch 'VerifyDownloadedPackage' -or
         $runnerSourceText -notmatch '--check-updates' -or
         $runnerSourceText -notmatch 'BeginAutomaticUpdateCheck') {
