@@ -28,6 +28,7 @@ namespace RobocopyDrop
         private const string UserRegistryPath = "HKEY_CURRENT_USER\\Software\\RobocopyDrop";
         private const string MachineRegistryPath = "HKEY_LOCAL_MACHINE\\Software\\RobocopyDrop";
         private const string LanguagePreferenceSourceName = "UILanguageSource";
+        private const string LanguagePreferenceDefaultName = "UILanguageInstallerDefault";
         private const string UserLanguagePreferenceSource = "user";
         private static string language;
 
@@ -293,35 +294,56 @@ namespace RobocopyDrop
         {
             if (!string.IsNullOrEmpty(language)) return;
 
-            // The MSI language is the default for a clean installation.
-            // UILanguage is honored only after the user has explicitly changed
-            // it in Settings. This also prevents a stale preference left by an
-            // older Italian test installation from overriding the English MSI.
+            string installerDefault = ReadInstallerDefaultLanguage();
+            string value = installerDefault;
+
+            // An explicit choice is preserved across updates of the same MSI
+            // language, but it must not override a different language package.
+            // Old preferences created before this marker existed are ignored.
             string preferenceSource = ReadLanguage(
                 UserRegistryPath,
                 LanguagePreferenceSourceName);
-            string value = null;
+            string preferenceInstallerDefault = ReadLanguage(
+                UserRegistryPath,
+                LanguagePreferenceDefaultName);
 
             if (string.Equals(
-                preferenceSource,
-                UserLanguagePreferenceSource,
-                StringComparison.OrdinalIgnoreCase))
+                    preferenceSource,
+                    UserLanguagePreferenceSource,
+                    StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrEmpty(preferenceInstallerDefault) &&
+                string.Equals(
+                    NormalizeLanguage(preferenceInstallerDefault),
+                    installerDefault,
+                    StringComparison.OrdinalIgnoreCase))
             {
-                value = ReadLanguage(UserRegistryPath, "UILanguage");
+                string userLanguage = ReadLanguage(
+                    UserRegistryPath,
+                    "UILanguage");
+                if (!string.IsNullOrEmpty(userLanguage))
+                    value = userLanguage;
             }
 
+            language = NormalizeLanguage(value);
+        }
+
+        private static string ReadInstallerDefaultLanguage()
+        {
+            string value = ReadLanguage(
+                UserRegistryPath,
+                "DefaultLanguage");
             if (string.IsNullOrEmpty(value))
-                value = ReadLanguage(UserRegistryPath, "DefaultLanguage");
+                value = ReadLanguage(
+                    MachineRegistryPath,
+                    "DefaultLanguage");
             if (string.IsNullOrEmpty(value))
-                value = ReadLanguage(MachineRegistryPath, "DefaultLanguage");
-            if (string.IsNullOrEmpty(value))
-                value = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals(
-                    "it",
-                    StringComparison.OrdinalIgnoreCase)
+                value = CultureInfo.CurrentUICulture
+                    .TwoLetterISOLanguageName.Equals(
+                        "it",
+                        StringComparison.OrdinalIgnoreCase)
                     ? "it"
                     : "en";
-
-            language = NormalizeLanguage(value);
+            return NormalizeLanguage(value);
         }
 
         private static string ReadLanguage(string path, string name)
@@ -342,6 +364,7 @@ namespace RobocopyDrop
         public static void SaveLanguage(string value)
         {
             string normalizedLanguage = NormalizeLanguage(value);
+            string installerDefault = ReadInstallerDefaultLanguage();
 
             // Persist the preference without changing the language of the
             // current process. Existing windows keep one coherent language;
@@ -355,6 +378,11 @@ namespace RobocopyDrop
                 UserRegistryPath,
                 LanguagePreferenceSourceName,
                 UserLanguagePreferenceSource,
+                RegistryValueKind.String);
+            Registry.SetValue(
+                UserRegistryPath,
+                LanguagePreferenceDefaultName,
+                installerDefault,
                 RegistryValueKind.String);
         }
 
@@ -3696,6 +3724,8 @@ namespace RobocopyDrop
             saveReportButton.Visible = false;
             verifyButton.Visible = false;
             retryButton.Visible = false;
+            cancelCloseButton.Text = UiText.T("Annulla");
+            cancelCloseButton.Visible = true;
             cancelCloseButton.Enabled = true;
 
             selectedThreadMode = AppSettings.LoadThreadMode();
