@@ -240,8 +240,9 @@
       <Shortcut Id="UninstallShortcut"
                 Name="$(var.UninstallShortcutName)"
                 Description="$(var.UninstallShortcutDescription)"
-                Target="[System64Folder]msiexec.exe"
-                Arguments="/x [ProductCode] /norestart"
+                Target="[INSTALLFOLDER]RobocopyDropRunner.exe"
+                Arguments="--uninstall [ProductCode]"
+                WorkingDirectory="INSTALLFOLDER"
                 Icon="RobocopyDropIcon" />
       <RemoveFolder Id="RemoveProgramMenuFolder" On="uninstall" />
       <RegistryValue Root="HKCU"

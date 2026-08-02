@@ -206,6 +206,9 @@ namespace RobocopyDrop
             { "Impossibile aprire la cartella dei report: ", "Unable to open the reports folder: " },
             { "Guida non trovata: ", "Guide not found: " },
             { "Impossibile aprire la guida: ", "Unable to open the guide: " },
+            { "Vuoi disinstallare Robocopy Drop?", "Uninstall Robocopy Drop?" },
+            { "Robocopy Drop - Disinstalla", "Robocopy Drop - Uninstall" },
+            { "Impossibile avviare la disinstallazione: ", "Unable to start uninstall: " },
             { "Profilo manuale", "Manual profile" },
             { "Profilo locale veloce", "Fast local drive profile" },
             { "Profilo USB/rimovibile - file piccoli", "USB/removable profile - small files" },
@@ -4032,6 +4035,46 @@ namespace RobocopyDrop
             }
         }
 
+        private static int RunUninstall(string productCode)
+        {
+            Guid parsedProductCode;
+            if (!Guid.TryParse(productCode, out parsedProductCode))
+            {
+                MessageBox.Show(UiText.T("Impossibile avviare la disinstallazione: ") +
+                    UiText.T("Richiesta di copia non valida."),
+                    "Robocopy Drop", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return 22;
+            }
+
+            DialogResult answer = MessageBox.Show(
+                UiText.T("Vuoi disinstallare Robocopy Drop?"),
+                UiText.T("Robocopy Drop - Disinstalla"),
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2);
+
+            if (answer != DialogResult.Yes) return 0;
+
+            try
+            {
+                Thread.Sleep(250);
+
+                ProcessStartInfo information = new ProcessStartInfo();
+                information.FileName = Path.Combine(Environment.SystemDirectory, "msiexec.exe");
+                information.Arguments = "/x " + parsedProductCode.ToString("B") +
+                    " /passive /norestart";
+                information.UseShellExecute = true;
+                Process.Start(information);
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(UiText.T("Impossibile avviare la disinstallazione: ") + ex.Message,
+                    "Robocopy Drop", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return 23;
+            }
+        }
+
         [STAThread]
         private static int Main(string[] args)
         {
@@ -4062,6 +4105,14 @@ namespace RobocopyDrop
 
             if (args.Length == 1 && string.Equals(args[0], "--open-guide", StringComparison.OrdinalIgnoreCase))
                 return OpenGuide();
+
+            if (args.Length == 2 &&
+                string.Equals(args[0], "--uninstall", StringComparison.OrdinalIgnoreCase))
+            {
+                Application.EnableVisualStyles();
+                Application.SetCompatibleTextRenderingDefault(false);
+                return RunUninstall(args[1]);
+            }
 
             if (args.Length != 1 || !File.Exists(args[0]))
             {
