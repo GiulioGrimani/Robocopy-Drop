@@ -27,6 +27,8 @@ namespace RobocopyDrop
     {
         private const string UserRegistryPath = "HKEY_CURRENT_USER\\Software\\RobocopyDrop";
         private const string MachineRegistryPath = "HKEY_LOCAL_MACHINE\\Software\\RobocopyDrop";
+        private const string LanguagePreferenceSourceName = "UILanguageSource";
+        private const string UserLanguagePreferenceSource = "user";
         private static string language;
 
         private static readonly Dictionary<string, string> English = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -290,11 +292,35 @@ namespace RobocopyDrop
         public static void Initialize()
         {
             if (!string.IsNullOrEmpty(language)) return;
-            string value = ReadLanguage(UserRegistryPath, "UILanguage");
-            if (string.IsNullOrEmpty(value)) value = ReadLanguage(UserRegistryPath, "DefaultLanguage");
-            if (string.IsNullOrEmpty(value)) value = ReadLanguage(MachineRegistryPath, "DefaultLanguage");
+
+            // The MSI language is the default for a clean installation.
+            // UILanguage is honored only after the user has explicitly changed
+            // it in Settings. This also prevents a stale preference left by an
+            // older Italian test installation from overriding the English MSI.
+            string preferenceSource = ReadLanguage(
+                UserRegistryPath,
+                LanguagePreferenceSourceName);
+            string value = null;
+
+            if (string.Equals(
+                preferenceSource,
+                UserLanguagePreferenceSource,
+                StringComparison.OrdinalIgnoreCase))
+            {
+                value = ReadLanguage(UserRegistryPath, "UILanguage");
+            }
+
             if (string.IsNullOrEmpty(value))
-                value = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals("it", StringComparison.OrdinalIgnoreCase) ? "it" : "en";
+                value = ReadLanguage(UserRegistryPath, "DefaultLanguage");
+            if (string.IsNullOrEmpty(value))
+                value = ReadLanguage(MachineRegistryPath, "DefaultLanguage");
+            if (string.IsNullOrEmpty(value))
+                value = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName.Equals(
+                    "it",
+                    StringComparison.OrdinalIgnoreCase)
+                    ? "it"
+                    : "en";
+
             language = NormalizeLanguage(value);
         }
 
@@ -316,7 +342,16 @@ namespace RobocopyDrop
         public static void SaveLanguage(string value)
         {
             language = NormalizeLanguage(value);
-            Registry.SetValue(UserRegistryPath, "UILanguage", language, RegistryValueKind.String);
+            Registry.SetValue(
+                UserRegistryPath,
+                "UILanguage",
+                language,
+                RegistryValueKind.String);
+            Registry.SetValue(
+                UserRegistryPath,
+                LanguagePreferenceSourceName,
+                UserLanguagePreferenceSource,
+                RegistryValueKind.String);
         }
 
         public static string T(string italian)
@@ -1857,6 +1892,7 @@ namespace RobocopyDrop
         private Button installUpdateButton;
         private UpdateCheckResult pendingUpdate;
         private bool updateCheckInProgress;
+        private readonly string originalLanguage;
 
         public int SelectedThreadMode { get; private set; }
 
@@ -1867,6 +1903,7 @@ namespace RobocopyDrop
         public SettingsForm(bool forceUpdateCheck)
         {
             this.forceUpdateCheck = forceUpdateCheck;
+            originalLanguage = UiText.Language;
             BuildUi();
             Shown += SettingsFormShown;
         }
@@ -2139,7 +2176,16 @@ namespace RobocopyDrop
             try
             {
                 AppSettings.SaveThreadMode(SelectedThreadMode);
-                UiText.SaveLanguage(languageOption == null ? UiText.Language : languageOption.Value);
+                string selectedLanguage = languageOption == null
+                    ? UiText.Language
+                    : languageOption.Value;
+                if (!string.Equals(
+                    selectedLanguage,
+                    originalLanguage,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    UiText.SaveLanguage(selectedLanguage);
+                }
                 UpdateManager.SaveAutomaticCheckEnabled(automaticUpdatesCheckBox.Checked);
                 DialogResult = DialogResult.OK;
                 Close();
