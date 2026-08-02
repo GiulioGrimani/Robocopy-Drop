@@ -43,7 +43,7 @@ namespace RobocopyDrop
             { "Lingua interfaccia:", "Interface language:" },
             { "Italiano", "Italian" },
             { "Inglese", "English" },
-            { "La nuova lingua sara usata dalla prossima finestra di Robocopy Drop.", "The new language will be used by the next Robocopy Drop window." },
+            { "La nuova lingua sara usata al prossimo avvio di Robocopy Drop.", "The new language will be used the next time Robocopy Drop starts." },
             { "Thread effettivi: determinati all'avvio della copia", "Effective threads: determined when the copy starts" },
             { "Thread effettivi: ", "Effective threads: " },
             { "Annulla", "Cancel" },
@@ -341,11 +341,15 @@ namespace RobocopyDrop
 
         public static void SaveLanguage(string value)
         {
-            language = NormalizeLanguage(value);
+            string normalizedLanguage = NormalizeLanguage(value);
+
+            // Persist the preference without changing the language of the
+            // current process. Existing windows keep one coherent language;
+            // the new preference is loaded by the next Robocopy Drop process.
             Registry.SetValue(
                 UserRegistryPath,
                 "UILanguage",
-                language,
+                normalizedLanguage,
                 RegistryValueKind.String);
             Registry.SetValue(
                 UserRegistryPath,
@@ -2002,7 +2006,7 @@ namespace RobocopyDrop
             Controls.Add(languageCombo);
 
             Label languageNote = new Label();
-            languageNote.Text = UiText.T("La nuova lingua sara usata dalla prossima finestra di Robocopy Drop.");
+            languageNote.Text = UiText.T("La nuova lingua sara usata al prossimo avvio di Robocopy Drop.");
             languageNote.ForeColor = SystemColors.GrayText;
             languageNote.Location = new Point(172, 248);
             languageNote.Size = new Size(330, 42);
