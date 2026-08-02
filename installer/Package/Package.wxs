@@ -40,13 +40,16 @@
     <Property Id="ARPCOMMENTS" Value="$(var.ProductDescription)" />
     <Property Id="DISABLEADVTSHORTCUTS" Value="1" />
 
+    <!-- Running Robocopy Drop processes need closing only when an existing
+         installation is being repaired, upgraded or removed. A clean first
+         installation must not wait for or restart unrelated processes. -->
     <util:CloseApplication Id="CloseRobocopyDropRunner"
                            Target="RobocopyDropRunner.exe"
                            CloseMessage="yes"
                            Timeout="10"
                            TerminateProcess="0"
                            RebootPrompt="no"
-                           Condition="NOT Installed OR REINSTALL OR REMOVE=&quot;ALL&quot; OR WIX_UPGRADE_DETECTED" />
+                           Condition="REINSTALL OR REMOVE=&quot;ALL&quot; OR WIX_UPGRADE_DETECTED" />
     <!-- Close components introduced by the experimental 1.5.0 branch so
          this stable MSI can upgrade it cleanly. These files are not installed
          by the classic build. -->
@@ -56,21 +59,26 @@
                            Timeout="10"
                            TerminateProcess="0"
                            RebootPrompt="no"
-                           Condition="NOT Installed OR REINSTALL OR REMOVE=&quot;ALL&quot; OR WIX_UPGRADE_DETECTED" />
+                           Condition="REINSTALL OR REMOVE=&quot;ALL&quot; OR WIX_UPGRADE_DETECTED" />
     <util:CloseApplication Id="CloseRobocopyDropAgent"
                            Target="RobocopyDropAgent.exe"
                            CloseMessage="yes"
                            Timeout="10"
                            TerminateProcess="1"
                            RebootPrompt="no"
-                           Condition="NOT Installed OR REINSTALL OR REMOVE=&quot;ALL&quot; OR WIX_UPGRADE_DETECTED" />
+                           Condition="REINSTALL OR REMOVE=&quot;ALL&quot; OR WIX_UPGRADE_DETECTED" />
+    <!-- A first-time install does not need to terminate Explorer: the DLL
+         cannot already be loaded. On upgrade, repair or uninstall Explorer
+         still has to release the in-process shell-extension DLL. Keep that
+         interruption short: request an orderly shell shutdown, wait two
+         seconds, then terminate only if Explorer has not exited. -->
     <util:CloseApplication Id="CloseExplorerForShellExtension"
                            Target="explorer.exe"
                            EndSessionMessage="yes"
-                           Timeout="10"
+                           Timeout="2"
                            TerminateProcess="0"
                            RebootPrompt="no"
-                           Condition="NOT Installed OR REINSTALL OR REMOVE=&quot;ALL&quot; OR WIX_UPGRADE_DETECTED" />
+                           Condition="REINSTALL OR REMOVE=&quot;ALL&quot; OR WIX_UPGRADE_DETECTED" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="Robocopy Drop" />
@@ -275,10 +283,10 @@
     <InstallExecuteSequence>
       <Custom Action="RestartExplorerRollback"
               Before="InstallFinalize"
-              Condition="NOT Installed OR REINSTALL OR REMOVE=&quot;ALL&quot; OR WIX_UPGRADE_DETECTED" />
+              Condition="REINSTALL OR REMOVE=&quot;ALL&quot; OR WIX_UPGRADE_DETECTED" />
       <Custom Action="RestartExplorerCommit"
               Before="InstallFinalize"
-              Condition="NOT Installed OR REINSTALL OR REMOVE=&quot;ALL&quot; OR WIX_UPGRADE_DETECTED" />
+              Condition="REINSTALL OR REMOVE=&quot;ALL&quot; OR WIX_UPGRADE_DETECTED" />
     </InstallExecuteSequence>
 
     <Feature Id="MainFeature" Title="Robocopy Drop" Level="1">
