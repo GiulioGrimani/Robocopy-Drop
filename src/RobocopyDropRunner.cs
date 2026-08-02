@@ -52,6 +52,7 @@ namespace RobocopyDrop
             { "La richiesta non contiene sorgenti sufficienti.", "The request does not contain enough source items." },
             { "Sorgente non trovata: ", "Source not found: " },
             { "Sorgente e destinazione coincidono: ", "Source and destination are the same: " },
+            { "Duplicazione nella stessa cartella: ", "Copy in the same folder: " },
             { "Non e possibile copiare una cartella dentro se stessa: ", "A folder cannot be copied into itself: " },
             { "Piu sorgenti produrrebbero lo stesso elemento di destinazione: ", "Multiple sources would create the same destination item: " },
             { "Una cartella sorgente collide con un file nella destinazione: ", "A source folder conflicts with a destination file: " },
@@ -97,6 +98,7 @@ namespace RobocopyDrop
             { "Codice di uscita Robocopy: ", "Robocopy exit code: " },
             { "Gia completato nel tentativo precedente: ", "Already completed in the previous attempt: " },
             { "Conserva entrambi: ", "Keep both: " },
+            { "Copia creata come: ", "Copy created as: " },
             { "Copia non riuscita: ", "Copy failed: " },
             { "AVVISO metadati: ", "METADATA WARNING: " },
             { "Copia con Robocopy", "Copy with Robocopy" },
@@ -348,6 +350,8 @@ namespace RobocopyDrop
         public string SourcePath;
         public string DestinationPath;
         public string EffectiveDestinationPath;
+        public bool UseNativeCopy;
+        public bool IsAutomaticDuplicate;
         public long Size;
         public DateTime SourceWriteUtc;
         public DateTime DestinationWriteUtc;
@@ -370,6 +374,7 @@ namespace RobocopyDrop
         public string SourcePath;
         public string DestinationPath;
         public bool IsDirectory;
+        public bool IsAutomaticDuplicate;
         public int Index;
     }
 
@@ -2210,19 +2215,39 @@ namespace RobocopyDrop
             return string.Format(CultureInfo.CurrentCulture, "{0} s", Math.Max(0, value.Seconds));
         }
 
-        public static string MakeKeepBothPath(string originalDestination)
+        public static string MakeUniqueCopyPath(
+            string originalDestination,
+            bool isDirectory,
+            ISet<string> reservedPaths)
         {
             string directory = Path.GetDirectoryName(originalDestination);
-            string extension = Path.GetExtension(originalDestination);
-            string baseName = Path.GetFileNameWithoutExtension(originalDestination);
-            string candidate = Path.Combine(directory, baseName + UiText.T(" - Copia") + extension);
+            string extension = isDirectory ? string.Empty : Path.GetExtension(originalDestination);
+            string baseName = isDirectory
+                ? Path.GetFileName(originalDestination)
+                : Path.GetFileNameWithoutExtension(originalDestination);
+
+            string candidate = Path.Combine(
+                directory,
+                baseName + UiText.T(" - Copia") + extension);
             int number = 2;
-            while (File.Exists(candidate) || Directory.Exists(candidate))
+
+            while (File.Exists(candidate) ||
+                   Directory.Exists(candidate) ||
+                   (reservedPaths != null && reservedPaths.Contains(candidate)))
             {
-                candidate = Path.Combine(directory, baseName + UiText.T(" - Copia") + " (" + number.ToString(CultureInfo.InvariantCulture) + ")" + extension);
+                candidate = Path.Combine(
+                    directory,
+                    baseName + UiText.T(" - Copia") +
+                    " (" + number.ToString(CultureInfo.InvariantCulture) + ")" +
+                    extension);
                 number++;
             }
             return candidate;
+        }
+
+        public static string MakeKeepBothPath(string originalDestination)
+        {
+            return MakeUniqueCopyPath(originalDestination, false, null);
         }
     }
 
@@ -2266,19 +2291,26 @@ namespace RobocopyDrop
                     continue;
                 }
 
-                string destination = Path.Combine(plan.DestinationRoot, PathHelpers.LeafName(source));
-                if (PathHelpers.EqualsPath(source, destination))
+                bool sourceIsDirectory = Directory.Exists(source);
+                string destination = Path.Combine(
+                    plan.DestinationRoot,
+                    PathHelpers.LeafName(source));
+                bool automaticDuplicate = PathHelpers.EqualsPath(source, destination);
+
+                if (automaticDuplicate)
                 {
-                    plan.Errors.Add(UiText.T("Sorgente e destinazione coincidono: ") + source);
-                    continue;
+                    destination = PathHelpers.MakeUniqueCopyPath(
+                        destination,
+                        sourceIsDirectory,
+                        topDestinations);
                 }
-                if (Directory.Exists(source) && PathHelpers.IsChildPath(destination, source))
+
+                if (sourceIsDirectory && PathHelpers.IsChildPath(destination, source))
                 {
                     plan.Errors.Add(UiText.T("Non e possibile copiare una cartella dentro se stessa: ") + source);
                     continue;
                 }
 
-                bool sourceIsDirectory = Directory.Exists(source);
                 if (!topDestinations.Add(destination))
                 {
                     plan.Errors.Add(UiText.T("Piu sorgenti produrrebbero lo stesso elemento di destinazione: ") + destination);
@@ -2299,13 +2331,20 @@ namespace RobocopyDrop
                 top.SourcePath = source;
                 top.DestinationPath = destination;
                 top.IsDirectory = sourceIsDirectory;
+                top.IsAutomaticDuplicate = automaticDuplicate;
                 top.Index = plan.TopLevels.Count;
                 plan.TopLevels.Add(top);
 
                 if (top.IsDirectory)
                     ScanDirectory(plan, top, destinationMap, progress, token);
                 else
-                    AddFile(plan, top, source, destination, destinationMap);
+                    AddFile(
+                        plan,
+                        top,
+                        source,
+                        destination,
+                        destinationMap,
+                        automaticDuplicate);
             }
 
             progress(100, UiText.T("Analisi completata"));
@@ -2384,7 +2423,13 @@ namespace RobocopyDrop
                     {
                         string fileRelative = entry.FullName.Substring(top.SourcePath.Length).TrimStart('\\', '/');
                         string destinationFile = Path.Combine(top.DestinationPath, fileRelative);
-                        AddFile(plan, top, entry.FullName, destinationFile, destinationMap);
+                        AddFile(
+                            plan,
+                            top,
+                            entry.FullName,
+                            destinationFile,
+                            destinationMap,
+                            false);
                         scanned++;
                         if ((scanned % 250) == 0) progress(-1, entry.FullName);
                     }
@@ -2392,8 +2437,13 @@ namespace RobocopyDrop
             }
         }
 
-        private static void AddFile(CopyPlan plan, TopLevelItem top, string source, string destination,
-            Dictionary<string, FileItem> destinationMap)
+        private static void AddFile(
+            CopyPlan plan,
+            TopLevelItem top,
+            string source,
+            string destination,
+            Dictionary<string, FileItem> destinationMap,
+            bool useNativeCopy)
         {
             FileInfo sourceInfo;
             try
@@ -2427,6 +2477,8 @@ namespace RobocopyDrop
             item.SourcePath = source;
             item.DestinationPath = destination;
             item.EffectiveDestinationPath = destination;
+            item.UseNativeCopy = useNativeCopy;
+            item.IsAutomaticDuplicate = useNativeCopy;
             item.Size = sourceInfo.Length;
             item.SourceWriteUtc = sourceInfo.LastWriteTimeUtc;
             item.TopLevelIndex = top.Index;
@@ -2679,6 +2731,13 @@ namespace RobocopyDrop
                 foreach (TopLevelItem top in plan.TopLevels)
                 {
                     token.ThrowIfCancellationRequested();
+                    if (top.IsAutomaticDuplicate)
+                    {
+                        detail(
+                            UiText.T("Duplicazione nella stessa cartella: ") +
+                            top.SourcePath + " -> " + top.DestinationPath);
+                    }
+
                     if (top.IsDirectory)
                     {
                         bool precision = plan.Files.Any(f => f.TopLevelIndex == top.Index &&
@@ -2775,7 +2834,7 @@ namespace RobocopyDrop
                 f.Disposition == FileDisposition.Conflict && f.Action == ConflictAction.KeepBoth))
             {
                 token.ThrowIfCancellationRequested();
-                CopyKeepBoth(item, result);
+                CopyNativeFile(item, result);
             }
         }
 
@@ -2783,9 +2842,9 @@ namespace RobocopyDrop
         {
             FileItem item = plan.Files.FirstOrDefault(f => f.TopLevelIndex == top.Index);
             if (item == null || !CopyPlan.ShouldCopy(item)) return;
-            if (item.Action == ConflictAction.KeepBoth)
+            if (item.UseNativeCopy || item.Action == ConflictAction.KeepBoth)
             {
-                CopyKeepBoth(item, result);
+                CopyNativeFile(item, result);
                 return;
             }
             RunFileBatch(new List<FileItem> { item }, result);
@@ -2912,10 +2971,13 @@ namespace RobocopyDrop
             return exitCode;
         }
 
-        private void CopyKeepBoth(FileItem item, CopyResult result)
+        private void CopyNativeFile(FileItem item, CopyResult result)
         {
             string destination = item.EffectiveDestinationPath;
-            if (string.IsNullOrEmpty(destination) || PathHelpers.EqualsPath(destination, item.DestinationPath))
+            if (string.IsNullOrEmpty(destination) ||
+                PathHelpers.EqualsPath(destination, item.SourcePath) ||
+                (item.Action == ConflictAction.KeepBoth &&
+                 PathHelpers.EqualsPath(destination, item.DestinationPath)))
             {
                 destination = PathHelpers.MakeKeepBothPath(item.DestinationPath);
                 item.EffectiveDestinationPath = destination;
@@ -2932,7 +2994,11 @@ namespace RobocopyDrop
                     return;
                 }
             }
-            detail(UiText.T("Conserva entrambi: ") + item.SourcePath + " -> " + destination);
+            detail(
+                (item.IsAutomaticDuplicate
+                    ? UiText.T("Copia creata come: ")
+                    : UiText.T("Conserva entrambi: ")) +
+                item.SourcePath + " -> " + destination);
 
             long baseBytes = completedBytes;
             int cancel = 0;
@@ -3509,16 +3575,45 @@ namespace RobocopyDrop
             if (closeAfterCancel) Close();
         }
 
+        private void ApplyFatalLayout()
+        {
+            Color errorColor = Color.FromArgb(190, 35, 35);
+
+            Icon = SystemIcons.Error;
+            routeLabel.Visible = false;
+            progressBar.Visible = false;
+            percentLabel.Visible = false;
+            speedLabel.Visible = false;
+            etaLabel.Visible = false;
+
+            titleLabel.Font = new Font(
+                Font.FontFamily,
+                13.5f,
+                FontStyle.Bold);
+            titleLabel.ForeColor = errorColor;
+
+            currentLabel.Location = new Point(24, 82);
+            currentLabel.Size = new Size(710, 78);
+            currentLabel.AutoEllipsis = false;
+            currentLabel.UseMnemonic = false;
+            currentLabel.Font = new Font(
+                Font.FontFamily,
+                10.0f,
+                FontStyle.Bold);
+            currentLabel.ForeColor = errorColor;
+
+            remainingLabel.Location = new Point(24, 168);
+            remainingLabel.Size = new Size(710, 42);
+        }
+
         private void FinishFatal(string title, string message)
         {
             running = false;
             finishedAt = DateTime.Now;
+            ApplyFatalLayout();
             titleLabel.Text = title;
             currentLabel.Text = message;
             remainingLabel.Text = UiText.T("Consulta Piu dettagli per informazioni tecniche.");
-            progressBar.Style = ProgressBarStyle.Continuous;
-            progressBar.Value = 0;
-            percentLabel.Text = UiText.T("Errore");
             speedLabel.Text = "";
             etaLabel.Text = "";
             cancelCloseButton.Text = UiText.T("Chiudi");

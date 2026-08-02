@@ -363,7 +363,7 @@ function Get-LanguageProperties([string]$Language) {
             GuideTarget='[INSTALLFOLDER]GUIDE-EN.pdf';
             ReportsShortcutName='Robocopy Drop - Reports';
             ReportsShortcutDescription='Open the folder containing saved Robocopy Drop reports';
-            UpdateShortcutName='Robocopy Drop - Updates';
+            UpdateShortcutName='Robocopy Drop - Check for Updates';
             UpdateShortcutDescription='Check GitHub for a newer Robocopy Drop release';
             UninstallShortcutName='Robocopy Drop - Uninstall';
             UninstallShortcutDescription='Confirm and remove Robocopy Drop';
@@ -383,7 +383,7 @@ function Get-LanguageProperties([string]$Language) {
         GuideTarget='[INSTALLFOLDER]GUIDA-IT.pdf';
         ReportsShortcutName='Robocopy Drop - Report';
         ReportsShortcutDescription='Apre la cartella contenente i report salvati da Robocopy Drop';
-        UpdateShortcutName='Robocopy Drop - Aggiornamenti';
+        UpdateShortcutName='Robocopy Drop - Controlla aggiornamenti';
         UpdateShortcutDescription='Controlla su GitHub se e disponibile una nuova versione';
         UninstallShortcutName='Robocopy Drop - Disinstalla';
         UninstallShortcutDescription='Conferma e rimuove Robocopy Drop';
@@ -636,6 +636,11 @@ try {
         $runnerSourceText -notmatch 'Shell\.Application' -or
         $runnerSourceText -notmatch 'ROBOCOPYDROP_EXTERNAL_EXPLORER_RESTART=1') {
         throw 'Coordinamento delle finestre di Esplora file non rilevato nel runner.'
+    }
+    if ($runnerSourceText -notmatch 'MakeUniqueCopyPath' -or
+        $runnerSourceText -notmatch 'UseNativeCopy' -or
+        $runnerSourceText -notmatch 'ApplyFatalLayout') {
+        throw 'Duplicazione nella stessa cartella o nuovo layout errori non rilevati nel runner.'
     }
 
     $assemblyVersion = $Version + '.0'
