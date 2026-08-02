@@ -203,6 +203,9 @@ namespace RobocopyDrop
             { "Differenze", "Differences" },
             { "HASH: ", "HASH: " },
             { "Richiesta di copia non valida.", "Invalid copy request." },
+            { "Impossibile aprire la cartella dei report: ", "Unable to open the reports folder: " },
+            { "Guida non trovata: ", "Guide not found: " },
+            { "Impossibile aprire la guida: ", "Unable to open the guide: " },
             { "Profilo manuale", "Manual profile" },
             { "Profilo locale veloce", "Fast local drive profile" },
             { "Profilo USB/rimovibile - file piccoli", "USB/removable profile - small files" },
@@ -225,6 +228,7 @@ namespace RobocopyDrop
             { "La release non contiene l'MSI previsto per la lingua installata: ", "The release does not contain the expected MSI for the installed language: " },
             { "L'URL dell'asset GitHub non e valido.", "The GitHub asset URL is invalid." },
             { "Nessun aggiornamento disponibile.", "No updates are available." },
+            { "Nessuna release pubblicata su GitHub.", "No GitHub release has been published yet." },
             { "Versione disponibile: ", "Available version: " },
             { "Verifica non riuscita: ", "Check failed: " },
             { "E disponibile Robocopy Drop ", "Robocopy Drop " },
@@ -447,6 +451,7 @@ namespace RobocopyDrop
     internal static class NativeMethods
     {
         public const int SW_HIDE = 0;
+        public const int SW_RESTORE = 9;
         public const uint COPY_FILE_FAIL_IF_EXISTS = 0x00000001;
         public const uint COPY_FILE_RESTARTABLE = 0x00000002;
         public const uint PROGRESS_CONTINUE = 0;
@@ -484,6 +489,9 @@ namespace RobocopyDrop
 
         [DllImport("user32.dll")]
         public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [DllImport("user32.dll")]
+        public static extern bool SetForegroundWindow(IntPtr hWnd);
 
         [DllImport("user32.dll")]
         public static extern bool SetProcessDPIAware();
@@ -914,6 +922,7 @@ namespace RobocopyDrop
     internal sealed class UpdateCheckResult
     {
         public bool IsConfigured;
+        public bool NoPublishedRelease;
         public bool IsUpdateAvailable;
         public Version CurrentVersion;
         public Version LatestVersion;
@@ -1154,7 +1163,7 @@ namespace RobocopyDrop
             {
                 ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
                 string endpoint = "https://api.github.com/repos/" + Uri.EscapeDataString(configuration.Owner) + "/" +
-                                  Uri.EscapeDataString(configuration.Repository) + "/releases/latest";
+                                  Uri.EscapeDataString(configuration.Repository) + "/releases?per_page=20";
                 using (TimeoutWebClient client = new TimeoutWebClient(15000))
                 {
                     client.Encoding = Encoding.UTF8;
@@ -1164,9 +1173,17 @@ namespace RobocopyDrop
                     string json = client.DownloadString(endpoint);
                     JavaScriptSerializer serializer = new JavaScriptSerializer();
                     serializer.MaxJsonLength = 4 * 1024 * 1024;
-                    GitHubReleaseResponse release = serializer.Deserialize<GitHubReleaseResponse>(json);
-                    if (release == null || release.draft || release.prerelease)
-                        throw new InvalidDataException(UiText.T("La risposta GitHub non contiene una release stabile valida."));
+                    GitHubReleaseResponse[] releases = serializer.Deserialize<GitHubReleaseResponse[]>(json);
+                    GitHubReleaseResponse release = releases == null ? null : releases.FirstOrDefault(
+                        delegate(GitHubReleaseResponse candidate)
+                        {
+                            return candidate != null && !candidate.draft && !candidate.prerelease;
+                        });
+                    if (release == null)
+                    {
+                        result.NoPublishedRelease = true;
+                        return result;
+                    }
 
                     Version latest = ParseVersion(release.tag_name);
                     if (latest == null)
@@ -1615,6 +1632,7 @@ namespace RobocopyDrop
         private Button checkUpdatesButton;
         private Button installUpdateButton;
         private UpdateCheckResult pendingUpdate;
+        private bool updateCheckInProgress;
 
         public int SelectedThreadMode { get; private set; }
 
@@ -1810,11 +1828,13 @@ namespace RobocopyDrop
 
         private void BeginUpdateCheck(bool force)
         {
+            if (updateCheckInProgress) return;
             if (!UpdateManager.IsConfigured)
             {
                 updateStatusLabel.Text = UiText.T("Repository GitHub non configurato.");
                 return;
             }
+            updateCheckInProgress = true;
             checkUpdatesButton.Enabled = false;
             installUpdateButton.Enabled = false;
             updateStatusLabel.Text = UiText.T("Controllo aggiornamenti in corso...");
@@ -1823,6 +1843,7 @@ namespace RobocopyDrop
 
         private void ApplyUpdateResult(UpdateCheckResult result)
         {
+            updateCheckInProgress = false;
             checkUpdatesButton.Enabled = UpdateManager.IsConfigured;
             pendingUpdate = result != null && result.IsUpdateAvailable ? result : null;
             installUpdateButton.Enabled = pendingUpdate != null;
@@ -1836,6 +1857,11 @@ namespace RobocopyDrop
                 updateStatusLabel.Text = UiText.T("Repository GitHub non configurato.");
                 return;
             }
+            if (result.NoPublishedRelease)
+            {
+                updateStatusLabel.Text = UiText.T("Nessuna release pubblicata su GitHub.");
+                return;
+            }
             if (!string.IsNullOrEmpty(result.ErrorMessage))
             {
                 updateStatusLabel.Text = UiText.T("Verifica non riuscita: ") + result.ErrorMessage;
@@ -1844,6 +1870,21 @@ namespace RobocopyDrop
             updateStatusLabel.Text = result.IsUpdateAvailable
                 ? UiText.T("Versione disponibile: ") + UpdateManager.VersionText(result.LatestVersion)
                 : UiText.T("Nessun aggiornamento disponibile.");
+        }
+
+        public void ActivateFromExternalRequest(bool checkUpdates)
+        {
+            if (WindowState == FormWindowState.Minimized)
+                WindowState = FormWindowState.Normal;
+            if (!Visible) Show();
+            Activate();
+            BringToFront();
+            if (IsHandleCreated)
+            {
+                NativeMethods.ShowWindow(Handle, NativeMethods.SW_RESTORE);
+                NativeMethods.SetForegroundWindow(Handle);
+            }
+            if (checkUpdates) BeginUpdateCheck(true);
         }
 
         private void UpdateNowClicked(object sender, EventArgs e)
@@ -3777,6 +3818,176 @@ namespace RobocopyDrop
 
     internal static class Program
     {
+        private const string SettingsMutexName = "Local\\RobocopyDrop.Settings";
+        private const string SettingsUpdateEventName = "Local\\RobocopyDrop.Settings.CheckUpdates";
+
+        private static void ActivateExistingSettingsWindow()
+        {
+            try
+            {
+                Process current = Process.GetCurrentProcess();
+                string processName = Path.GetFileNameWithoutExtension(Application.ExecutablePath);
+                for (int attempt = 0; attempt < 20; attempt++)
+                {
+                    foreach (Process process in Process.GetProcessesByName(processName))
+                    {
+                        try
+                        {
+                            if (process.Id == current.Id) continue;
+                            process.Refresh();
+                            IntPtr handle = process.MainWindowHandle;
+                            if (handle == IntPtr.Zero) continue;
+                            NativeMethods.ShowWindow(handle, NativeMethods.SW_RESTORE);
+                            NativeMethods.SetForegroundWindow(handle);
+                            return;
+                        }
+                        catch
+                        {
+                        }
+                        finally
+                        {
+                            process.Dispose();
+                        }
+                    }
+                    Thread.Sleep(100);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private static void SignalExistingSettingsInstance(bool forceUpdateCheck)
+        {
+            if (forceUpdateCheck)
+            {
+                for (int attempt = 0; attempt < 10; attempt++)
+                {
+                    try
+                    {
+                        using (EventWaitHandle updateEvent = EventWaitHandle.OpenExisting(SettingsUpdateEventName))
+                        {
+                            updateEvent.Set();
+                            break;
+                        }
+                    }
+                    catch (WaitHandleCannotBeOpenedException)
+                    {
+                        Thread.Sleep(100);
+                    }
+                    catch
+                    {
+                        break;
+                    }
+                }
+            }
+            ActivateExistingSettingsWindow();
+        }
+
+        private static int RunSettings(bool forceUpdateCheck)
+        {
+            bool createdNew = false;
+            Mutex settingsMutex = null;
+            try
+            {
+                settingsMutex = new Mutex(true, SettingsMutexName, out createdNew);
+                if (!createdNew)
+                {
+                    SignalExistingSettingsInstance(forceUpdateCheck);
+                    return 0;
+                }
+
+                using (EventWaitHandle updateEvent = new EventWaitHandle(
+                    false, EventResetMode.AutoReset, SettingsUpdateEventName))
+                using (SettingsForm form = new SettingsForm(forceUpdateCheck))
+                {
+                    Thread signalThread = new Thread(delegate()
+                    {
+                        while (!form.IsDisposed)
+                        {
+                            try
+                            {
+                                if (!updateEvent.WaitOne(500)) continue;
+                            }
+                            catch (ObjectDisposedException)
+                            {
+                                return;
+                            }
+                            if (form.IsDisposed || !form.IsHandleCreated) continue;
+                            try
+                            {
+                                form.BeginInvoke((MethodInvoker)delegate
+                                {
+                                    form.ActivateFromExternalRequest(true);
+                                });
+                            }
+                            catch
+                            {
+                            }
+                        }
+                    });
+                    signalThread.IsBackground = true;
+                    signalThread.Name = "Robocopy Drop settings activation";
+                    signalThread.Start();
+                    Application.Run(form);
+                }
+                return 0;
+            }
+            finally
+            {
+                if (settingsMutex != null)
+                {
+                    if (createdNew)
+                    {
+                        try { settingsMutex.ReleaseMutex(); }
+                        catch { }
+                    }
+                    settingsMutex.Dispose();
+                }
+            }
+        }
+
+        private static int OpenReportsFolder()
+        {
+            try
+            {
+                string path = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "RobocopyDrop", "Logs");
+                Directory.CreateDirectory(path);
+                Process.Start(new ProcessStartInfo("explorer.exe", "\"" + path + "\"")
+                {
+                    UseShellExecute = true
+                });
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(UiText.T("Impossibile aprire la cartella dei report: ") + ex.Message,
+                    "Robocopy Drop", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return 20;
+            }
+        }
+
+        private static int OpenGuide()
+        {
+            try
+            {
+                string fileName = UiText.IsEnglish ? "GUIDE-EN.pdf" : "GUIDA-IT.pdf";
+                string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, fileName);
+                if (!File.Exists(path))
+                    throw new FileNotFoundException(UiText.T("Guida non trovata: ") + path);
+                Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(UiText.T("Impossibile aprire la guida: ") + ex.Message,
+                    "Robocopy Drop", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return 21;
+            }
+        }
+
         [STAThread]
         private static int Main(string[] args)
         {
@@ -3799,9 +4010,14 @@ namespace RobocopyDrop
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
                 bool forceUpdateCheck = string.Equals(args[0], "--check-updates", StringComparison.OrdinalIgnoreCase);
-                Application.Run(new SettingsForm(forceUpdateCheck));
-                return 0;
+                return RunSettings(forceUpdateCheck);
             }
+
+            if (args.Length == 1 && string.Equals(args[0], "--open-reports", StringComparison.OrdinalIgnoreCase))
+                return OpenReportsFolder();
+
+            if (args.Length == 1 && string.Equals(args[0], "--open-guide", StringComparison.OrdinalIgnoreCase))
+                return OpenGuide();
 
             if (args.Length != 1 || !File.Exists(args[0]))
             {

@@ -357,15 +357,15 @@ function Get-LanguageProperties([string]$Language) {
             OsMessage='Robocopy Drop supports Windows 10 and Windows 11 x64 only.';
             ArchMessage='This build supports native Windows x64 PCs only. Windows ARM64 is not supported.';
             HandlerDescription='Robocopy Drop Drag-and-Drop Handler';
-            SettingsShortcutName='Robocopy Drop Settings';
+            SettingsShortcutName='Robocopy Drop - Settings';
             SettingsShortcutDescription='Configure language, automatic media profile, and Robocopy threads';
-            GuideShortcutName='Robocopy Drop Guide';
+            GuideShortcutName='Robocopy Drop - Guide';
             GuideTarget='[INSTALLFOLDER]GUIDE-EN.pdf';
-            ReportsShortcutName='Open Robocopy Drop Reports';
+            ReportsShortcutName='Robocopy Drop - Reports';
             ReportsShortcutDescription='Open the folder containing saved Robocopy Drop reports';
-            UpdateShortcutName='Check for Robocopy Drop Updates';
+            UpdateShortcutName='Robocopy Drop - Updates';
             UpdateShortcutDescription='Check GitHub for a newer Robocopy Drop release';
-            UninstallShortcutName='Uninstall Robocopy Drop';
+            UninstallShortcutName='Robocopy Drop - Uninstall';
             UninstallShortcutDescription='Start Windows Installer and remove Robocopy Drop';
         }
     }
@@ -377,15 +377,15 @@ function Get-LanguageProperties([string]$Language) {
         OsMessage='Robocopy Drop supporta soltanto Windows 10 e Windows 11 x64.';
         ArchMessage='Questa build supporta soltanto PC Windows x64 nativi. Windows ARM64 non e supportato.';
         HandlerDescription='Gestore trascinamento Robocopy Drop';
-        SettingsShortcutName='Impostazioni Robocopy Drop';
+        SettingsShortcutName='Robocopy Drop - Impostazioni';
         SettingsShortcutDescription='Configura lingua, profilo automatico e thread Robocopy';
-        GuideShortcutName='Guida Robocopy Drop';
+        GuideShortcutName='Robocopy Drop - Guida';
         GuideTarget='[INSTALLFOLDER]GUIDA-IT.pdf';
-        ReportsShortcutName='Apri cartella report';
+        ReportsShortcutName='Robocopy Drop - Report';
         ReportsShortcutDescription='Apre la cartella contenente i report salvati da Robocopy Drop';
-        UpdateShortcutName='Controlla aggiornamenti Robocopy Drop';
+        UpdateShortcutName='Robocopy Drop - Aggiornamenti';
         UpdateShortcutDescription='Controlla su GitHub se e disponibile una nuova versione';
-        UninstallShortcutName='Disinstalla Robocopy Drop';
+        UninstallShortcutName='Robocopy Drop - Disinstalla';
         UninstallShortcutDescription='Avvia Windows Installer e rimuove Robocopy Drop';
     }
 }
@@ -551,9 +551,13 @@ try {
         [string]$shortcutById['UninstallShortcut'].Arguments -notmatch '/x\s+\[ProductCode\]') {
         throw 'La scorciatoia Disinstalla non punta a msiexec.exe /x [ProductCode].'
     }
-    if ([string]$shortcutById['ReportsShortcut'].Target -notmatch 'cmd\.exe$' -or
-        [string]$shortcutById['ReportsShortcut'].Arguments -notmatch 'RobocopyDrop\\Logs') {
-        throw 'La scorciatoia Report non apre la cartella LocalAppData\RobocopyDrop\Logs.'
+    if ([string]$shortcutById['GuideShortcut'].Target -notmatch 'RobocopyDropRunner\.exe$' -or
+        [string]$shortcutById['GuideShortcut'].Arguments -notmatch '--open-guide') {
+        throw 'La scorciatoia Guida non avvia il runner con --open-guide.'
+    }
+    if ([string]$shortcutById['ReportsShortcut'].Target -notmatch 'RobocopyDropRunner\.exe$' -or
+        [string]$shortcutById['ReportsShortcut'].Arguments -notmatch '--open-reports') {
+        throw 'La scorciatoia Report non avvia il runner con --open-reports.'
     }
     $updateTarget = [string]$shortcutById['UpdateShortcut'].Target
     $updateArguments = [string]$shortcutById['UpdateShortcut'].Arguments
