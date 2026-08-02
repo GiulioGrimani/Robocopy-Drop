@@ -637,6 +637,11 @@ try {
         $runnerSourceText -notmatch 'ROBOCOPYDROP_EXTERNAL_EXPLORER_RESTART=1') {
         throw 'Coordinamento delle finestre di Esplora file non rilevato nel runner.'
     }
+    if ($runnerSourceText -notmatch 'UILanguageSource' -or
+        $runnerSourceText -notmatch 'UserLanguagePreferenceSource' -or
+        $runnerSourceText -notmatch 'originalLanguage') {
+        throw 'Gestione del default lingua MSI e della preferenza utente non rilevata.'
+    }
     if ($runnerSourceText -notmatch 'MakeUniqueCopyPath' -or
         $runnerSourceText -notmatch 'UseNativeCopy' -or
         $runnerSourceText -notmatch 'ApplyFatalLayout\(string\s+message\)' -or
