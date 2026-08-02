@@ -3387,6 +3387,7 @@ namespace RobocopyDrop
             // Compact mode uses the exact designed client size. Details mode
             // can be expanded and resized separately.
             MinimumSize = Size;
+            MaximumSize = Size;
         }
 
         private Label NewMetricLabel(string text, int x, int y, int width)
@@ -3428,6 +3429,51 @@ namespace RobocopyDrop
             cancelCloseButton.Location = new Point(
                 ClientSize.Width - 146,
                 ClientSize.Height - 66);
+        }
+
+        private void ApplyCompactWindowLayout()
+        {
+            SuspendLayout();
+            try
+            {
+                // The expanded window may have a large MinimumSize or may be
+                // maximized. Clear both constraints before restoring the exact
+                // compact client area.
+                WindowState = FormWindowState.Normal;
+                MinimumSize = Size.Empty;
+                MaximumSize = Size.Empty;
+                FormBorderStyle = FormBorderStyle.FixedDialog;
+                MaximizeBox = false;
+                ClientSize = new Size(760, compactClientHeight);
+                cancelCloseButton.Location = compactCloseLocation;
+
+                Size fixedOuterSize = Size;
+                MinimumSize = fixedOuterSize;
+                MaximumSize = fixedOuterSize;
+            }
+            finally
+            {
+                ResumeLayout(true);
+            }
+        }
+
+        private void ApplyExpandedWindowLayout()
+        {
+            SuspendLayout();
+            try
+            {
+                WindowState = FormWindowState.Normal;
+                MinimumSize = Size.Empty;
+                MaximumSize = Size.Empty;
+                FormBorderStyle = FormBorderStyle.Sizable;
+                MaximizeBox = true;
+                ClientSize = new Size(760, 640);
+                MinimumSize = Size;
+            }
+            finally
+            {
+                ResumeLayout(true);
+            }
         }
 
         private void MainFormLoad(object sender, EventArgs e)
@@ -3705,6 +3751,9 @@ namespace RobocopyDrop
             speedLabel.Visible = true;
             etaLabel.Visible = true;
             SetProgressBarState(NativeMethods.PBST_NORMAL);
+
+            if (!expanded)
+                ApplyCompactWindowLayout();
         }
 
         private void ApplyOutcomeVisuals(
@@ -3950,18 +3999,14 @@ namespace RobocopyDrop
             copySummaryButton.Location = new Point(316, actionsTop);
             saveReportButton.Location = new Point(458, actionsTop);
 
-            compactCloseLocation = new Point(614, actionsTop + 58);
+            compactCloseLocation = new Point(614, actionsTop);
             cancelCloseButton.Location = compactCloseLocation;
             compactClientHeight = Math.Max(
-                330,
-                cancelCloseButton.Bottom + 28);
+                270,
+                cancelCloseButton.Bottom + 24);
 
             if (!expanded)
-            {
-                ClientSize = new Size(760, compactClientHeight);
-                MinimumSize = Size;
-                cancelCloseButton.Location = compactCloseLocation;
-            }
+                ApplyCompactWindowLayout();
         }
 
         private void FinishFatal(string title, string message)
@@ -4155,10 +4200,7 @@ namespace RobocopyDrop
 
             if (expanded)
             {
-                FormBorderStyle = FormBorderStyle.Sizable;
-                MaximizeBox = true;
-                ClientSize = new Size(760, 640);
-                MinimumSize = Size;
+                ApplyExpandedWindowLayout();
 
                 detailsBox.SetBounds(
                     24,
@@ -4185,15 +4227,8 @@ namespace RobocopyDrop
             }
             else
             {
-                FormBorderStyle = FormBorderStyle.FixedDialog;
-                MaximizeBox = false;
-                ClientSize = new Size(760, compactClientHeight);
-                MinimumSize = Size;
-
-                updateLink.Location = fatalLayoutActive
-                    ? new Point(24, 224)
-                    : new Point(24, 224);
-                cancelCloseButton.Location = compactCloseLocation;
+                updateLink.Location = new Point(24, 224);
+                ApplyCompactWindowLayout();
             }
             RefreshUpdateLink();
         }

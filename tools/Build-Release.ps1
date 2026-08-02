@@ -642,6 +642,9 @@ try {
         $runnerSourceText -notmatch 'ApplyFatalLayout\(string\s+message\)' -or
         $runnerSourceText -notmatch 'FormBorderStyle\.FixedDialog' -or
         $runnerSourceText -notmatch 'MainFormResize' -or
+        $runnerSourceText -notmatch 'ApplyCompactWindowLayout' -or
+        $runnerSourceText -notmatch 'ApplyExpandedWindowLayout' -or
+        $runnerSourceText -notmatch 'MaximumSize\s*=\s*fixedOuterSize' -or
         $runnerSourceText -notmatch 'compactClientHeight' -or
         $runnerSourceText -notmatch 'currentLabel\.Image\s*=\s*null') {
         throw 'Duplicazione nella stessa cartella o layout stabile degli errori non rilevati nel runner.'
