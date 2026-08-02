@@ -645,6 +645,8 @@ try {
         $runnerSourceText -notmatch 'ApplyCompactWindowLayout' -or
         $runnerSourceText -notmatch 'ApplyExpandedWindowLayout' -or
         $runnerSourceText -notmatch 'MaximumSize\s*=\s*fixedOuterSize' -or
+        $runnerSourceText -notmatch 'AnchorStyles\.Top\s*\|\s*AnchorStyles\.Right' -or
+        $runnerSourceText -notmatch 'cancelCloseButton\.BringToFront' -or
         $runnerSourceText -notmatch 'compactClientHeight' -or
         $runnerSourceText -notmatch 'currentLabel\.Image\s*=\s*null') {
         throw 'Duplicazione nella stessa cartella o layout stabile degli errori non rilevati nel runner.'

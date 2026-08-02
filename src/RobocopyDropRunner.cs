@@ -3336,7 +3336,10 @@ namespace RobocopyDrop
             cancelCloseButton.Text = UiText.T("Annulla");
             cancelCloseButton.Location = new Point(614, 310);
             cancelCloseButton.Size = new Size(120, 38);
-            cancelCloseButton.Anchor = AnchorStyles.Right | AnchorStyles.Bottom;
+            // La posizione verticale viene gestita esplicitamente nei layout
+            // compatto e dettagli. L'ancoraggio Bottom spostava il pulsante
+            // durante il primo ridimensionamento della finestra di errore.
+            cancelCloseButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             cancelCloseButton.Click += CancelCloseClicked;
             Controls.Add(cancelCloseButton);
 
@@ -3445,7 +3448,6 @@ namespace RobocopyDrop
                 FormBorderStyle = FormBorderStyle.FixedDialog;
                 MaximizeBox = false;
                 ClientSize = new Size(760, compactClientHeight);
-                cancelCloseButton.Location = compactCloseLocation;
 
                 Size fixedOuterSize = Size;
                 MinimumSize = fixedOuterSize;
@@ -3455,6 +3457,11 @@ namespace RobocopyDrop
             {
                 ResumeLayout(true);
             }
+
+            // Impostare la posizione dopo ResumeLayout evita che il motore di
+            // layout riapplichi le distanze del precedente ancoraggio.
+            cancelCloseButton.Location = compactCloseLocation;
+            cancelCloseButton.BringToFront();
         }
 
         private void ApplyExpandedWindowLayout()
@@ -3469,6 +3476,9 @@ namespace RobocopyDrop
                 MaximizeBox = true;
                 ClientSize = new Size(760, 640);
                 MinimumSize = Size;
+                cancelCloseButton.Location = new Point(
+                    ClientSize.Width - 146,
+                    ClientSize.Height - 66);
             }
             finally
             {
