@@ -3470,10 +3470,8 @@ namespace RobocopyDrop
         private void OpenSettings()
         {
             bool copyAlreadyRunning = running && engine != null;
-            using (SettingsForm dialog = new SettingsForm())
-            {
-                if (dialog.ShowDialog(this) != DialogResult.OK) return;
-            }
+            DialogResult settingsResult = Program.ShowSettingsSingleInstance(this, false);
+            if (settingsResult != DialogResult.OK) return;
 
             selectedThreadMode = AppSettings.LoadThreadMode();
             BeginAutomaticUpdateCheck();
@@ -3819,9 +3817,10 @@ namespace RobocopyDrop
     internal static class Program
     {
         private const string SettingsMutexName = "Local\\RobocopyDrop.Settings";
+        private const string SettingsActivateEventName = "Local\\RobocopyDrop.Settings.Activate";
         private const string SettingsUpdateEventName = "Local\\RobocopyDrop.Settings.CheckUpdates";
 
-        private static void ActivateExistingSettingsWindow()
+        private static void ActivateExistingSettingsWindowFallback()
         {
             try
             {
@@ -3857,34 +3856,94 @@ namespace RobocopyDrop
             }
         }
 
+        private static bool SignalNamedSettingsEvent(string eventName)
+        {
+            for (int attempt = 0; attempt < 20; attempt++)
+            {
+                try
+                {
+                    using (EventWaitHandle signalEvent = EventWaitHandle.OpenExisting(eventName))
+                    {
+                        signalEvent.Set();
+                        return true;
+                    }
+                }
+                catch (WaitHandleCannotBeOpenedException)
+                {
+                    Thread.Sleep(100);
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+            return false;
+        }
+
         private static void SignalExistingSettingsInstance(bool forceUpdateCheck)
         {
+            bool activationSignaled = SignalNamedSettingsEvent(SettingsActivateEventName);
             if (forceUpdateCheck)
+                SignalNamedSettingsEvent(SettingsUpdateEventName);
+            if (!activationSignaled)
+                ActivateExistingSettingsWindowFallback();
+        }
+
+        private static Thread StartSettingsSignalThread(
+            SettingsForm form,
+            EventWaitHandle activateEvent,
+            EventWaitHandle updateEvent)
+        {
+            Thread signalThread = new Thread(delegate()
             {
-                for (int attempt = 0; attempt < 10; attempt++)
+                WaitHandle[] signals = new WaitHandle[] { activateEvent, updateEvent };
+                while (!form.IsDisposed)
                 {
+                    int signalIndex;
                     try
                     {
-                        using (EventWaitHandle updateEvent = EventWaitHandle.OpenExisting(SettingsUpdateEventName))
+                        signalIndex = WaitHandle.WaitAny(signals, 500);
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        return;
+                    }
+
+                    if (signalIndex == WaitHandle.WaitTimeout) continue;
+                    bool checkUpdates = signalIndex == 1;
+
+                    for (int attempt = 0; attempt < 50 && !form.IsDisposed; attempt++)
+                    {
+                        if (!form.IsHandleCreated)
                         {
-                            updateEvent.Set();
-                            break;
+                            Thread.Sleep(100);
+                            continue;
                         }
-                    }
-                    catch (WaitHandleCannotBeOpenedException)
-                    {
-                        Thread.Sleep(100);
-                    }
-                    catch
-                    {
+
+                        try
+                        {
+                            bool requestedCheck = checkUpdates;
+                            form.BeginInvoke((MethodInvoker)delegate
+                            {
+                                form.ActivateFromExternalRequest(requestedCheck);
+                            });
+                        }
+                        catch
+                        {
+                        }
                         break;
                     }
                 }
-            }
-            ActivateExistingSettingsWindow();
+            });
+            signalThread.IsBackground = true;
+            signalThread.Name = "Robocopy Drop settings activation";
+            signalThread.Start();
+            return signalThread;
         }
 
-        private static int RunSettings(bool forceUpdateCheck)
+        internal static DialogResult ShowSettingsSingleInstance(
+            IWin32Window owner,
+            bool forceUpdateCheck)
         {
             bool createdNew = false;
             Mutex settingsMutex = null;
@@ -3894,44 +3953,23 @@ namespace RobocopyDrop
                 if (!createdNew)
                 {
                     SignalExistingSettingsInstance(forceUpdateCheck);
-                    return 0;
+                    return DialogResult.None;
                 }
 
+                using (EventWaitHandle activateEvent = new EventWaitHandle(
+                    false, EventResetMode.AutoReset, SettingsActivateEventName))
                 using (EventWaitHandle updateEvent = new EventWaitHandle(
                     false, EventResetMode.AutoReset, SettingsUpdateEventName))
                 using (SettingsForm form = new SettingsForm(forceUpdateCheck))
                 {
-                    Thread signalThread = new Thread(delegate()
+                    StartSettingsSignalThread(form, activateEvent, updateEvent);
+                    if (owner == null)
                     {
-                        while (!form.IsDisposed)
-                        {
-                            try
-                            {
-                                if (!updateEvent.WaitOne(500)) continue;
-                            }
-                            catch (ObjectDisposedException)
-                            {
-                                return;
-                            }
-                            if (form.IsDisposed || !form.IsHandleCreated) continue;
-                            try
-                            {
-                                form.BeginInvoke((MethodInvoker)delegate
-                                {
-                                    form.ActivateFromExternalRequest(true);
-                                });
-                            }
-                            catch
-                            {
-                            }
-                        }
-                    });
-                    signalThread.IsBackground = true;
-                    signalThread.Name = "Robocopy Drop settings activation";
-                    signalThread.Start();
-                    Application.Run(form);
+                        Application.Run(form);
+                        return form.DialogResult;
+                    }
+                    return form.ShowDialog(owner);
                 }
-                return 0;
             }
             finally
             {
@@ -3945,6 +3983,12 @@ namespace RobocopyDrop
                     settingsMutex.Dispose();
                 }
             }
+        }
+
+        private static int RunSettings(bool forceUpdateCheck)
+        {
+            ShowSettingsSingleInstance(null, forceUpdateCheck);
+            return 0;
         }
 
         private static int OpenReportsFolder()
