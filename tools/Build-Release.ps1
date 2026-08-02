@@ -640,9 +640,11 @@ try {
     if ($runnerSourceText -notmatch 'MakeUniqueCopyPath' -or
         $runnerSourceText -notmatch 'UseNativeCopy' -or
         $runnerSourceText -notmatch 'ApplyFatalLayout\(string\s+message\)' -or
-        $runnerSourceText -notmatch 'TextRenderer\.MeasureText' -or
-        $runnerSourceText -notmatch 'SystemIcons\.Error\.ToBitmap') {
-        throw 'Duplicazione nella stessa cartella o layout compatto degli errori non rilevati nel runner.'
+        $runnerSourceText -notmatch 'FormBorderStyle\.FixedDialog' -or
+        $runnerSourceText -notmatch 'MainFormResize' -or
+        $runnerSourceText -notmatch 'compactClientHeight' -or
+        $runnerSourceText -notmatch 'currentLabel\.Image\s*=\s*null') {
+        throw 'Duplicazione nella stessa cartella o layout stabile degli errori non rilevati nel runner.'
     }
     if ($runnerSourceText -notmatch 'PBM_SETSTATE' -or
         $runnerSourceText -notmatch 'ApplyOutcomeVisuals' -or

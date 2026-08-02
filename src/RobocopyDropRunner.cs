@@ -3189,6 +3189,9 @@ namespace RobocopyDrop
         private int activeRobocopyThreads;
         private string activeProfileDescription = string.Empty;
         private UpdateCheckResult pendingUpdate;
+        private bool fatalLayoutActive;
+        private int compactClientHeight = 390;
+        private Point compactCloseLocation = new Point(614, 310);
 
         private Label titleLabel;
         private Label routeLabel;
@@ -3221,14 +3224,17 @@ namespace RobocopyDrop
             Load += MainFormLoad;
             Shown += delegate { BeginAutomaticUpdateCheck(); };
             FormClosing += MainFormClosing;
+            Resize += MainFormResize;
         }
 
         private void BuildUi()
         {
             Text = UiText.T("Copia con Robocopy");
             StartPosition = FormStartPosition.CenterScreen;
-            MinimumSize = new Size(720, 360);
             ClientSize = new Size(760, 390);
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            MinimizeBox = true;
             Font = SystemFonts.MessageBoxFont;
             AutoScaleMode = AutoScaleMode.Dpi;
             Icon = SystemIcons.Information;
@@ -3239,6 +3245,7 @@ namespace RobocopyDrop
             titleLabel.AutoEllipsis = true;
             titleLabel.Location = new Point(24, 22);
             titleLabel.Size = new Size(570, 30);
+            titleLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             Controls.Add(titleLabel);
 
             settingsButton = new Button();
@@ -3255,11 +3262,13 @@ namespace RobocopyDrop
             routeLabel.ForeColor = SystemColors.GrayText;
             routeLabel.Location = new Point(24, 58);
             routeLabel.Size = new Size(710, 22);
+            routeLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             Controls.Add(routeLabel);
 
             progressBar = new ProgressBar();
             progressBar.Location = new Point(24, 94);
             progressBar.Size = new Size(710, 24);
+            progressBar.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             progressBar.Style = ProgressBarStyle.Marquee;
             progressBar.MarqueeAnimationSpeed = 28;
             Controls.Add(progressBar);
@@ -3273,6 +3282,7 @@ namespace RobocopyDrop
             currentLabel.AutoEllipsis = true;
             currentLabel.Location = new Point(24, 172);
             currentLabel.Size = new Size(710, 23);
+            currentLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             Controls.Add(currentLabel);
 
             remainingLabel = new Label();
@@ -3281,6 +3291,7 @@ namespace RobocopyDrop
             remainingLabel.ForeColor = SystemColors.GrayText;
             remainingLabel.Location = new Point(24, 202);
             remainingLabel.Size = new Size(710, 23);
+            remainingLabel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             Controls.Add(remainingLabel);
 
             updateLink = new LinkLabel();
@@ -3288,6 +3299,7 @@ namespace RobocopyDrop
             updateLink.AutoEllipsis = true;
             updateLink.Location = new Point(24, 224);
             updateLink.Size = new Size(560, 22);
+            updateLink.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             updateLink.Visible = false;
             updateLink.TabStop = true;
             updateLink.LinkClicked += UpdateLinkClicked;
@@ -3371,6 +3383,10 @@ namespace RobocopyDrop
             notifyIcon.Visible = false;
             UiText.Apply(this);
             ThemeHelper.Apply(this);
+
+            // Compact mode uses the exact designed client size. Details mode
+            // can be expanded and resized separately.
+            MinimumSize = Size;
         }
 
         private Label NewMetricLabel(string text, int x, int y, int width)
@@ -3392,6 +3408,26 @@ namespace RobocopyDrop
             button.Size = new Size(width, 34);
             Controls.Add(button);
             return button;
+        }
+
+        private void MainFormResize(object sender, EventArgs e)
+        {
+            if (!expanded) return;
+
+            detailsBox.SetBounds(
+                24,
+                306,
+                Math.Max(300, ClientSize.Width - 48),
+                Math.Max(120, ClientSize.Height - 404));
+            keepReportsCheckBox.Location = new Point(
+                24,
+                ClientSize.Height - 80);
+            updateLink.Location = new Point(
+                24,
+                ClientSize.Height - 56);
+            cancelCloseButton.Location = new Point(
+                ClientSize.Width - 146,
+                ClientSize.Height - 66);
         }
 
         private void MainFormLoad(object sender, EventArgs e)
@@ -3641,6 +3677,10 @@ namespace RobocopyDrop
 
         private void ResetOutcomeVisuals()
         {
+            fatalLayoutActive = false;
+            compactClientHeight = 390;
+            compactCloseLocation = new Point(614, 310);
+
             Icon = SystemIcons.Information;
             titleLabel.Font = new Font(Font.FontFamily, 13.5f, FontStyle.Regular);
             titleLabel.ForeColor = NormalTextColor();
@@ -3651,7 +3691,9 @@ namespace RobocopyDrop
             currentLabel.ForeColor = NormalTextColor();
             currentLabel.BackColor = BackColor;
             currentLabel.BorderStyle = BorderStyle.None;
+            currentLabel.Image = null;
             currentLabel.Padding = Padding.Empty;
+            currentLabel.TextAlign = ContentAlignment.MiddleLeft;
             currentLabel.AutoEllipsis = true;
 
             remainingLabel.Location = new Point(24, 202);
@@ -3847,6 +3889,7 @@ namespace RobocopyDrop
 
         private void ApplyFatalLayout(string message)
         {
+            fatalLayoutActive = true;
             Color errorColor = ErrorAccentColor();
 
             Icon = SystemIcons.Error;
@@ -3875,38 +3918,50 @@ namespace RobocopyDrop
             currentLabel.ForeColor = errorColor;
             currentLabel.BackColor = StatusBackgroundColor(false, false);
             currentLabel.BorderStyle = BorderStyle.FixedSingle;
-            currentLabel.Image = SystemIcons.Error.ToBitmap();
-            currentLabel.ImageAlign = ContentAlignment.MiddleLeft;
+            currentLabel.Image = null;
             currentLabel.TextAlign = ContentAlignment.MiddleLeft;
-            currentLabel.Padding = new Padding(48, 8, 12, 8);
+            currentLabel.Padding = new Padding(12, 8, 12, 8);
 
+            int availableTextWidth = Math.Max(320, ClientSize.Width - 72);
             Size measured = TextRenderer.MeasureText(
                 message ?? string.Empty,
                 currentLabel.Font,
-                new Size(638, 0),
-                TextFormatFlags.WordBreak | TextFormatFlags.NoPadding);
+                new Size(availableTextWidth, 0),
+                TextFormatFlags.WordBreak |
+                TextFormatFlags.NoPadding |
+                TextFormatFlags.TextBoxControl);
             int cardHeight = Math.Max(
                 54,
-                Math.Min(96, measured.Height + 20));
+                Math.Min(92, measured.Height + 22));
 
             currentLabel.Location = new Point(24, 76);
-            currentLabel.Size = new Size(710, cardHeight);
+            currentLabel.Size = new Size(ClientSize.Width - 48, cardHeight);
 
             remainingLabel.AutoEllipsis = false;
             remainingLabel.TextAlign = ContentAlignment.MiddleLeft;
             remainingLabel.Location = new Point(
                 24,
-                currentLabel.Bottom + 10);
-            remainingLabel.Size = new Size(710, 28);
-            remainingLabel.ForeColor = SystemColors.GrayText;
+                currentLabel.Bottom + 8);
+            remainingLabel.Size = new Size(ClientSize.Width - 48, 24);
+            remainingLabel.ForeColor = MutedTextColor();
 
-            int actionsTop = remainingLabel.Bottom + 22;
+            int actionsTop = remainingLabel.Bottom + 16;
             detailsButton.Location = new Point(24, actionsTop);
             copySummaryButton.Location = new Point(316, actionsTop);
             saveReportButton.Location = new Point(458, actionsTop);
-            cancelCloseButton.Location = new Point(
-                614,
-                actionsTop + 58);
+
+            compactCloseLocation = new Point(614, actionsTop + 58);
+            cancelCloseButton.Location = compactCloseLocation;
+            compactClientHeight = Math.Max(
+                330,
+                cancelCloseButton.Bottom + 28);
+
+            if (!expanded)
+            {
+                ClientSize = new Size(760, compactClientHeight);
+                MinimumSize = Size;
+                cancelCloseButton.Location = compactCloseLocation;
+            }
         }
 
         private void FinishFatal(string title, string message)
@@ -4094,14 +4149,32 @@ namespace RobocopyDrop
             expanded = !expanded;
             detailsBox.Visible = expanded;
             keepReportsCheckBox.Visible = expanded;
-            detailsButton.Text = expanded ? UiText.T("Meno dettagli") : UiText.T("Piu dettagli");
-            ClientSize = expanded ? new Size(760, 640) : new Size(760, 390);
+            detailsButton.Text = expanded
+                ? UiText.T("Meno dettagli")
+                : UiText.T("Piu dettagli");
+
             if (expanded)
             {
-                detailsBox.SetBounds(24, 306, 710, 236);
-                keepReportsCheckBox.Location = new Point(24, 560);
-                updateLink.Location = new Point(24, 584);
-                cancelCloseButton.Location = new Point(614, 574);
+                FormBorderStyle = FormBorderStyle.Sizable;
+                MaximizeBox = true;
+                ClientSize = new Size(760, 640);
+                MinimumSize = Size;
+
+                detailsBox.SetBounds(
+                    24,
+                    306,
+                    ClientSize.Width - 48,
+                    ClientSize.Height - 404);
+                keepReportsCheckBox.Location = new Point(
+                    24,
+                    ClientSize.Height - 80);
+                updateLink.Location = new Point(
+                    24,
+                    ClientSize.Height - 56);
+                cancelCloseButton.Location = new Point(
+                    ClientSize.Width - 146,
+                    ClientSize.Height - 66);
+
                 lock (detailLock)
                 {
                     detailsBox.Text = allDetails.ToString();
@@ -4112,8 +4185,15 @@ namespace RobocopyDrop
             }
             else
             {
-                updateLink.Location = new Point(24, 224);
-                cancelCloseButton.Location = new Point(614, 310);
+                FormBorderStyle = FormBorderStyle.FixedDialog;
+                MaximizeBox = false;
+                ClientSize = new Size(760, compactClientHeight);
+                MinimumSize = Size;
+
+                updateLink.Location = fatalLayoutActive
+                    ? new Point(24, 224)
+                    : new Point(24, 224);
+                cancelCloseButton.Location = compactCloseLocation;
             }
             RefreshUpdateLink();
         }
