@@ -14,6 +14,7 @@ $wsb = Join-Path $root 'build\RobocopyDrop-Test.wsb'
 New-Item -ItemType Directory -Force -Path (Split-Path $wsb -Parent) | Out-Null
 @"
 <Configuration>
+  <vGPU>Disable</vGPU>
   <MappedFolders>
     <MappedFolder>
       <HostFolder>$escaped</HostFolder>

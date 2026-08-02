@@ -257,12 +257,6 @@
                      KeyPath="yes" />
     </Component>
 
-    <CustomAction Id="RunnerSelfTest"
-                  FileRef="RunnerExe"
-                  ExeCommand="--self-test"
-                  Execute="deferred"
-                  Impersonate="yes"
-                  Return="check" />
     <CustomAction Id="RestartExplorerCommit"
                   Directory="WindowsFolder"
                   ExeCommand="explorer.exe"
@@ -277,9 +271,6 @@
                   Return="asyncNoWait" />
 
     <InstallExecuteSequence>
-      <Custom Action="RunnerSelfTest"
-              After="InstallFiles"
-              Condition="NOT Installed OR REINSTALL OR WIX_UPGRADE_DETECTED" />
       <Custom Action="RestartExplorerRollback"
               Before="InstallFinalize"
               Condition="NOT Installed OR REINSTALL OR REMOVE=&quot;ALL&quot; OR WIX_UPGRADE_DETECTED" />
