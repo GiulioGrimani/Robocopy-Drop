@@ -642,6 +642,13 @@ try {
         $runnerSourceText -notmatch 'ApplyFatalLayout') {
         throw 'Duplicazione nella stessa cartella o nuovo layout errori non rilevati nel runner.'
     }
+    if ($runnerSourceText -notmatch 'PBM_SETSTATE' -or
+        $runnerSourceText -notmatch 'ApplyOutcomeVisuals' -or
+        $runnerSourceText -notmatch 'BuildOutcomeSummary' -or
+        $runnerSourceText -notmatch 'Verifica SHA-256 riuscita' -or
+        $runnerSourceText -notmatch 'SetHashResult') {
+        throw 'Stati finali unificati o risultato SHA-256 evidenziato non rilevati nel runner.'
+    }
 
     $assemblyVersion = $Version + '.0'
     @"

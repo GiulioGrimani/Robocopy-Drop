@@ -144,6 +144,12 @@ namespace RobocopyDrop
             { "Copia completata", "Copy completed" },
             { "Copia annullata", "Copy cancelled" },
             { "Copia completata con problemi", "Copy completed with issues" },
+            { "Copia terminata con errori", "Copy finished with errors" },
+            { "Uno o piu file non sono stati copiati.", "One or more files were not copied." },
+            { "Completati: ", "Completed: " },
+            { " | Errori: ", " | Errors: " },
+            { " | Operazione annullata", " | Operation cancelled" },
+            { "Annullata al ", "Cancelled at " },
             { "Chiudi", "Close" },
             { "Report salvato automaticamente: ", "Report saved automatically: " },
             { "Nessun file e stato copiato.", "No files were copied." },
@@ -196,6 +202,12 @@ namespace RobocopyDrop
             { "Calcolo hash...", "Calculating hash..." },
             { "Verifica SHA-256 annullata", "SHA-256 verification cancelled" },
             { "Verifica SHA-256 completata", "SHA-256 verification completed" },
+            { "Verifica SHA-256 riuscita", "SHA-256 verification succeeded" },
+            { "Tutti i file coincidono.", "All files match." },
+            { "Nessuna differenza tra sorgente e destinazione.", "No differences between source and destination." },
+            { "Verifica SHA-256: differenze rilevate", "SHA-256 verification: differences detected" },
+            { "Verifica interrotta dall'utente.", "Verification interrupted by the user." },
+            { "Apri Piu dettagli per l'elenco completo.", "Open More details for the complete list." },
             { "Tutti i file verificati sono identici byte per byte.", "All verified files are byte-for-byte identical." },
             { "Nessuna differenza rilevata.", "No differences detected." },
             { "Verifica SHA-256: tutti i file coincidono.", "SHA-256 verification: all files match." },
@@ -469,6 +481,10 @@ namespace RobocopyDrop
         public const uint TBPF_NORMAL = 0x2;
         public const uint TBPF_ERROR = 0x4;
         public const uint TBPF_PAUSED = 0x8;
+        public const int PBM_SETSTATE = 0x0410;
+        public const int PBST_NORMAL = 0x0001;
+        public const int PBST_ERROR = 0x0002;
+        public const int PBST_PAUSED = 0x0003;
 
         [StructLayout(LayoutKind.Sequential)]
         public struct IO_COUNTERS
@@ -500,6 +516,13 @@ namespace RobocopyDrop
 
         [DllImport("user32.dll")]
         public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        public static extern IntPtr SendMessage(
+            IntPtr hWnd,
+            int message,
+            IntPtr wParam,
+            IntPtr lParam);
 
         [DllImport("user32.dll")]
         public static extern bool SetProcessDPIAware();
@@ -2565,6 +2588,9 @@ namespace RobocopyDrop
             hashResult.AutoEllipsis = true;
             hashResult.Location = new Point(24, 262);
             hashResult.Size = new Size(662, 36);
+            hashResult.BorderStyle = BorderStyle.FixedSingle;
+            hashResult.Padding = new Padding(8, 8, 8, 0);
+            hashResult.Visible = false;
             Controls.Add(hashResult);
 
             Button compare = new Button();
@@ -2598,6 +2624,12 @@ namespace RobocopyDrop
             ActiveControl = skip;
             UiText.Apply(this);
             ThemeHelper.Apply(this);
+
+            Color warningColor = ThemeHelper.IsDarkMode()
+                ? Color.FromArgb(255, 194, 80)
+                : Color.FromArgb(145, 92, 0);
+            heading.ForeColor = warningColor;
+            heading.Font = new Font(Font.FontFamily, 10.5f, FontStyle.Bold);
         }
 
         private GroupBox CreateFileBox(string title, string path, long size, DateTime writeUtc, int x, int y)
@@ -2652,22 +2684,63 @@ namespace RobocopyDrop
             {
                 UseWaitCursor = true;
                 compareButton.Enabled = false;
-                hashResult.Text = UiText.T("Calcolo degli hash in corso...");
+                SetHashResult(UiText.T("Calcolo degli hash in corso..."), null);
                 hashResult.Refresh();
                 string first = HashFile(item.SourcePath);
                 string second = HashFile(item.DestinationPath);
-                hashResult.Text = string.Equals(first, second, StringComparison.OrdinalIgnoreCase)
-                    ? UiText.T("Gli hash SHA-256 coincidono: il contenuto e identico.")
-                    : UiText.T("Gli hash SHA-256 sono diversi.");
+                bool identical = string.Equals(first, second, StringComparison.OrdinalIgnoreCase);
+                SetHashResult(
+                    identical
+                        ? UiText.T("Gli hash SHA-256 coincidono: il contenuto e identico.")
+                        : UiText.T("Gli hash SHA-256 sono diversi."),
+                    identical);
             }
             catch (Exception ex)
             {
-                hashResult.Text = UiText.T("Confronto non riuscito: ") + ex.Message;
+                SetHashResult(UiText.T("Confronto non riuscito: ") + ex.Message, false);
             }
             finally
             {
                 compareButton.Enabled = true;
                 UseWaitCursor = false;
+            }
+        }
+
+        private void SetHashResult(string text, bool? success)
+        {
+            bool dark = ThemeHelper.IsDarkMode();
+            hashResult.Visible = true;
+            hashResult.Text = text;
+            hashResult.Font = new Font(Font.FontFamily, 9.5f, FontStyle.Bold);
+
+            if (!success.HasValue)
+            {
+                hashResult.ForeColor = dark
+                    ? Color.FromArgb(225, 225, 225)
+                    : SystemColors.ControlText;
+                hashResult.BackColor = dark
+                    ? Color.FromArgb(48, 48, 48)
+                    : Color.FromArgb(245, 245, 245);
+                return;
+            }
+
+            if (success.Value)
+            {
+                hashResult.ForeColor = dark
+                    ? Color.FromArgb(92, 214, 126)
+                    : Color.FromArgb(0, 110, 45);
+                hashResult.BackColor = dark
+                    ? Color.FromArgb(27, 53, 35)
+                    : Color.FromArgb(232, 247, 236);
+            }
+            else
+            {
+                hashResult.ForeColor = dark
+                    ? Color.FromArgb(255, 105, 105)
+                    : Color.FromArgb(190, 35, 35);
+                hashResult.BackColor = dark
+                    ? Color.FromArgb(62, 30, 30)
+                    : Color.FromArgb(253, 235, 235);
             }
         }
 
@@ -3464,6 +3537,7 @@ namespace RobocopyDrop
 
         private void StartCopyWorker()
         {
+            ResetOutcomeVisuals();
             titleLabel.Text = UiText.T("Copia in corso");
             progressBar.Style = ProgressBarStyle.Continuous;
             progressBar.MarqueeAnimationSpeed = 0;
@@ -3520,17 +3594,200 @@ namespace RobocopyDrop
             });
         }
 
+        private Color SuccessAccentColor()
+        {
+            return ThemeHelper.IsDarkMode()
+                ? Color.FromArgb(92, 214, 126)
+                : Color.FromArgb(0, 110, 45);
+        }
+
+        private Color WarningAccentColor()
+        {
+            return ThemeHelper.IsDarkMode()
+                ? Color.FromArgb(255, 194, 80)
+                : Color.FromArgb(145, 92, 0);
+        }
+
+        private Color ErrorAccentColor()
+        {
+            return ThemeHelper.IsDarkMode()
+                ? Color.FromArgb(255, 105, 105)
+                : Color.FromArgb(190, 35, 35);
+        }
+
+        private Color StatusBackgroundColor(bool success, bool warning)
+        {
+            bool dark = ThemeHelper.IsDarkMode();
+            if (success)
+                return dark ? Color.FromArgb(27, 53, 35) : Color.FromArgb(232, 247, 236);
+            if (warning)
+                return dark ? Color.FromArgb(62, 50, 27) : Color.FromArgb(255, 247, 222);
+            return dark ? Color.FromArgb(62, 30, 30) : Color.FromArgb(253, 235, 235);
+        }
+
+        private Color NormalTextColor()
+        {
+            return ThemeHelper.IsDarkMode()
+                ? Color.FromArgb(242, 242, 242)
+                : SystemColors.ControlText;
+        }
+
+        private Color MutedTextColor()
+        {
+            return ThemeHelper.IsDarkMode()
+                ? Color.FromArgb(185, 185, 185)
+                : SystemColors.GrayText;
+        }
+
+        private void ResetOutcomeVisuals()
+        {
+            Icon = SystemIcons.Information;
+            titleLabel.Font = new Font(Font.FontFamily, 13.5f, FontStyle.Regular);
+            titleLabel.ForeColor = NormalTextColor();
+
+            currentLabel.Location = new Point(24, 172);
+            currentLabel.Size = new Size(710, 23);
+            currentLabel.Font = new Font(Font.FontFamily, 9.0f, FontStyle.Regular);
+            currentLabel.ForeColor = NormalTextColor();
+            currentLabel.BackColor = BackColor;
+            currentLabel.BorderStyle = BorderStyle.None;
+            currentLabel.Padding = Padding.Empty;
+            currentLabel.AutoEllipsis = true;
+
+            remainingLabel.Location = new Point(24, 202);
+            remainingLabel.Size = new Size(710, 23);
+            remainingLabel.ForeColor = MutedTextColor();
+
+            progressBar.Visible = true;
+            percentLabel.Visible = true;
+            speedLabel.Visible = true;
+            etaLabel.Visible = true;
+            SetProgressBarState(NativeMethods.PBST_NORMAL);
+        }
+
+        private void ApplyOutcomeVisuals(
+            Color accent,
+            Color background,
+            Icon icon)
+        {
+            Icon = icon;
+            titleLabel.Font = new Font(Font.FontFamily, 13.5f, FontStyle.Bold);
+            titleLabel.ForeColor = accent;
+
+            currentLabel.Location = new Point(24, 164);
+            currentLabel.Size = new Size(710, 32);
+            currentLabel.Font = new Font(Font.FontFamily, 9.5f, FontStyle.Bold);
+            currentLabel.ForeColor = accent;
+            currentLabel.BackColor = background;
+            currentLabel.BorderStyle = BorderStyle.FixedSingle;
+            currentLabel.Padding = new Padding(8, 6, 8, 0);
+            currentLabel.AutoEllipsis = true;
+
+            remainingLabel.Location = new Point(24, 202);
+            remainingLabel.Size = new Size(710, 23);
+            remainingLabel.ForeColor = NormalTextColor();
+        }
+
+        private void SetProgressBarState(int state)
+        {
+            try
+            {
+                if (!progressBar.IsHandleCreated) progressBar.CreateControl();
+                NativeMethods.SendMessage(
+                    progressBar.Handle,
+                    NativeMethods.PBM_SETSTATE,
+                    new IntPtr(state),
+                    IntPtr.Zero);
+            }
+            catch
+            {
+            }
+        }
+
+        private int CompletedPercent()
+        {
+            if (result == null || plan == null || plan.BytesToCopy <= 0)
+                return result != null && result.Success ? 100 : 0;
+            return (int)Math.Max(
+                0,
+                Math.Min(100, result.CompletedBytes * 100L / plan.BytesToCopy));
+        }
+
+        private int FailureCount()
+        {
+            if (result == null) return 0;
+            return Math.Max(
+                result.Errors.Count,
+                result.RobocopyFailures + result.NativeCopyFailures);
+        }
+
+        private string BuildOutcomeSummary()
+        {
+            if (plan == null || result == null) return string.Empty;
+            string completed = UiText.T("Completati: ") +
+                result.CompletedFiles.ToString("N0", CultureInfo.CurrentCulture) +
+                UiText.T(" di ") +
+                plan.FilesToCopy.ToString("N0", CultureInfo.CurrentCulture);
+
+            if (result.Cancelled)
+                return completed + UiText.T(" | Operazione annullata");
+            if (!result.Success)
+                return completed + UiText.T(" | Errori: ") +
+                    Math.Max(1, FailureCount()).ToString("N0", CultureInfo.CurrentCulture);
+            return BuildCompactSummary();
+        }
+
         private void FinishCopy()
         {
             running = false;
+            int observedPercent = Math.Max(0, Math.Min(100, progressBar.Value));
             progressBar.Style = ProgressBarStyle.Continuous;
-            progressBar.Value = 100;
-            percentLabel.Text = result.Success ? "100%" : result.Cancelled ? UiText.T("Annullata") : UiText.T("Con errori");
-            speedLabel.Text = UiText.T("Durata: ") + PathHelpers.FormatDuration(finishedAt - startedAt);
+            speedLabel.Text = UiText.T("Durata: ") +
+                PathHelpers.FormatDuration(finishedAt - startedAt);
             etaLabel.Text = "";
-            currentLabel.Text = result.Success ? UiText.T("Operazione completata") : result.Cancelled ? UiText.T("Operazione annullata") : UiText.T("Operazione completata con problemi");
-            remainingLabel.Text = BuildCompactSummary();
-            titleLabel.Text = result.Success ? UiText.T("Copia completata") : result.Cancelled ? UiText.T("Copia annullata") : UiText.T("Copia completata con problemi");
+
+            if (result.Success)
+            {
+                progressBar.Value = 100;
+                percentLabel.Text = "100%";
+                titleLabel.Text = UiText.T("Copia completata");
+                currentLabel.Text = UiText.T("Operazione completata");
+                ApplyOutcomeVisuals(
+                    SuccessAccentColor(),
+                    StatusBackgroundColor(true, false),
+                    SystemIcons.Information);
+                SetProgressBarState(NativeMethods.PBST_NORMAL);
+            }
+            else if (result.Cancelled)
+            {
+                int cancelledPercent = Math.Min(99, observedPercent);
+                progressBar.Value = cancelledPercent;
+                percentLabel.Text = cancelledPercent > 0
+                    ? UiText.T("Annullata al ") +
+                        cancelledPercent.ToString(CultureInfo.CurrentCulture) + "%"
+                    : UiText.T("Annullata");
+                titleLabel.Text = UiText.T("Copia annullata");
+                currentLabel.Text = UiText.T("Operazione annullata dall'utente.");
+                ApplyOutcomeVisuals(
+                    WarningAccentColor(),
+                    StatusBackgroundColor(false, true),
+                    SystemIcons.Warning);
+                SetProgressBarState(NativeMethods.PBST_PAUSED);
+            }
+            else
+            {
+                progressBar.Value = CompletedPercent();
+                percentLabel.Text = UiText.T("Con errori");
+                titleLabel.Text = UiText.T("Copia terminata con errori");
+                currentLabel.Text = UiText.T("Uno o piu file non sono stati copiati.");
+                ApplyOutcomeVisuals(
+                    ErrorAccentColor(),
+                    StatusBackgroundColor(false, false),
+                    SystemIcons.Error);
+                SetProgressBarState(NativeMethods.PBST_ERROR);
+            }
+
+            remainingLabel.Text = BuildOutcomeSummary();
             cancelCloseButton.Text = UiText.T("Chiudi");
             cancelCloseButton.Enabled = true;
             openDestinationButton.Visible = true;
@@ -3542,13 +3799,21 @@ namespace RobocopyDrop
             if (result.Success)
             {
                 SetTaskbarState(NativeMethods.TBPF_NOPROGRESS);
-                if (keepReportsCheckBox.Checked) automaticReportPath = SaveAutomaticReport("successo");
+                if (keepReportsCheckBox.Checked)
+                    automaticReportPath = SaveAutomaticReport("successo");
             }
             else
             {
-                SetTaskbarState(result.Cancelled ? NativeMethods.TBPF_PAUSED : NativeMethods.TBPF_ERROR);
-                automaticReportPath = SaveAutomaticReport(result.Cancelled ? "annullata" : "errore");
-                if (!string.IsNullOrEmpty(automaticReportPath)) AppendDetail(UiText.T("Report salvato automaticamente: ") + automaticReportPath);
+                SetTaskbarState(
+                    result.Cancelled
+                        ? NativeMethods.TBPF_PAUSED
+                        : NativeMethods.TBPF_ERROR);
+                automaticReportPath = SaveAutomaticReport(
+                    result.Cancelled ? "annullata" : "errore");
+                if (!string.IsNullOrEmpty(automaticReportPath))
+                    AppendDetail(
+                        UiText.T("Report salvato automaticamente: ") +
+                        automaticReportPath);
             }
             RefreshUpdateLink();
             NotifyIfMinimized();
@@ -3565,6 +3830,11 @@ namespace RobocopyDrop
             progressBar.Style = ProgressBarStyle.Continuous;
             progressBar.Value = 0;
             percentLabel.Text = UiText.T("Annullata");
+            ApplyOutcomeVisuals(
+                WarningAccentColor(),
+                StatusBackgroundColor(false, true),
+                SystemIcons.Warning);
+            SetProgressBarState(NativeMethods.PBST_PAUSED);
             speedLabel.Text = "";
             etaLabel.Text = "";
             cancelCloseButton.Text = UiText.T("Chiudi");
@@ -3577,7 +3847,7 @@ namespace RobocopyDrop
 
         private void ApplyFatalLayout()
         {
-            Color errorColor = Color.FromArgb(190, 35, 35);
+            Color errorColor = ErrorAccentColor();
 
             Icon = SystemIcons.Error;
             routeLabel.Visible = false;
@@ -3601,9 +3871,13 @@ namespace RobocopyDrop
                 10.0f,
                 FontStyle.Bold);
             currentLabel.ForeColor = errorColor;
+            currentLabel.BackColor = StatusBackgroundColor(false, false);
+            currentLabel.BorderStyle = BorderStyle.FixedSingle;
+            currentLabel.Padding = new Padding(10, 10, 10, 0);
 
             remainingLabel.Location = new Point(24, 168);
             remainingLabel.Size = new Size(710, 42);
+            remainingLabel.ForeColor = NormalTextColor();
         }
 
         private void FinishFatal(string title, string message)
@@ -3935,11 +4209,15 @@ namespace RobocopyDrop
 
             running = true;
             RefreshUpdateLink();
+            ResetOutcomeVisuals();
             cancellation = new CancellationTokenSource();
             verifyButton.Enabled = false;
             cancelCloseButton.Text = UiText.T("Annulla");
             titleLabel.Text = UiText.T("Verifica SHA-256 in corso");
+            currentLabel.Text = UiText.T("Calcolo hash...");
+            remainingLabel.Text = "";
             progressBar.Value = 0;
+            SetProgressBarState(NativeMethods.PBST_NORMAL);
             SetTaskbarState(NativeMethods.TBPF_NORMAL);
             Thread worker = new Thread(VerifyWorker);
             worker.IsBackground = true;
@@ -4022,32 +4300,62 @@ namespace RobocopyDrop
             cancelCloseButton.Enabled = true;
             verifyButton.Enabled = true;
             RefreshUpdateLink();
+
             if (cancelled)
             {
+                int cancelledPercent = Math.Min(99, Math.Max(0, progressBar.Value));
+                progressBar.Value = cancelledPercent;
+                percentLabel.Text = cancelledPercent > 0
+                    ? UiText.T("Annullata al ") +
+                        cancelledPercent.ToString(CultureInfo.CurrentCulture) + "%"
+                    : UiText.T("Annullata");
                 titleLabel.Text = UiText.T("Verifica SHA-256 annullata");
-                percentLabel.Text = UiText.T("Annullata");
+                currentLabel.Text = UiText.T("Verifica interrotta dall'utente.");
+                remainingLabel.Text = "";
+                ApplyOutcomeVisuals(
+                    WarningAccentColor(),
+                    StatusBackgroundColor(false, true),
+                    SystemIcons.Warning);
+                SetProgressBarState(NativeMethods.PBST_PAUSED);
                 SetTaskbarState(NativeMethods.TBPF_PAUSED);
                 if (closeAfterCancel) Close();
                 return;
             }
+
+            progressBar.Value = 100;
+            percentLabel.Text = "100%";
             if (mismatches.Count == 0)
             {
-                titleLabel.Text = UiText.T("Verifica SHA-256 completata");
-                currentLabel.Text = UiText.T("Tutti i file verificati sono identici byte per byte.");
-                remainingLabel.Text = UiText.T("Nessuna differenza rilevata.");
-                progressBar.Value = 100;
-                percentLabel.Text = "100%";
+                titleLabel.Text = UiText.T("Verifica SHA-256 riuscita");
+                currentLabel.Text = UiText.T("Tutti i file coincidono.");
+                remainingLabel.Text = UiText.T(
+                    "Nessuna differenza tra sorgente e destinazione.");
+                ApplyOutcomeVisuals(
+                    SuccessAccentColor(),
+                    StatusBackgroundColor(true, false),
+                    SystemIcons.Information);
+                SetProgressBarState(NativeMethods.PBST_NORMAL);
                 SetTaskbarState(NativeMethods.TBPF_NOPROGRESS);
                 AppendDetail(UiText.T("Verifica SHA-256: tutti i file coincidono."));
             }
             else
             {
-                titleLabel.Text = UiText.T("Verifica SHA-256 completata con differenze");
-                currentLabel.Text = mismatches.Count.ToString(CultureInfo.CurrentCulture) + UiText.T(" differenze o errori rilevati.");
-                remainingLabel.Text = UiText.T("Consulta Piu dettagli.");
+                titleLabel.Text = UiText.T(
+                    "Verifica SHA-256: differenze rilevate");
+                currentLabel.Text = mismatches.Count.ToString(
+                    CultureInfo.CurrentCulture) +
+                    UiText.T(" differenze o errori rilevati.");
+                remainingLabel.Text = UiText.T(
+                    "Apri Piu dettagli per l'elenco completo.");
                 percentLabel.Text = UiText.T("Differenze");
+                ApplyOutcomeVisuals(
+                    ErrorAccentColor(),
+                    StatusBackgroundColor(false, false),
+                    SystemIcons.Error);
+                SetProgressBarState(NativeMethods.PBST_ERROR);
                 SetTaskbarState(NativeMethods.TBPF_ERROR);
-                foreach (string mismatch in mismatches) AppendDetail(UiText.T("HASH: ") + mismatch);
+                foreach (string mismatch in mismatches)
+                    AppendDetail(UiText.T("HASH: ") + mismatch);
                 automaticReportPath = SaveAutomaticReport("hash-differenze");
             }
             if (closeAfterCancel) Close();
