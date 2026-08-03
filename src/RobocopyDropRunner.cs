@@ -226,6 +226,18 @@ namespace RobocopyDrop
             { "Vuoi disinstallare Robocopy Drop?", "Uninstall Robocopy Drop?" },
             { "Robocopy Drop - Disinstalla", "Robocopy Drop - Uninstall" },
             { "Impossibile avviare la disinstallazione: ", "Unable to start uninstall: " },
+            { "Si", "Yes" },
+            { "No", "No" },
+            { "Esplora file verra riavviato temporaneamente.", "File Explorer will be restarted temporarily." },
+            { "Disinstallazione in corso", "Uninstall in progress" },
+            { "Preparazione della disinstallazione...", "Preparing uninstall..." },
+            { "Rimozione di Robocopy Drop...", "Removing Robocopy Drop..." },
+            { "Ripristino delle finestre di Esplora file...", "Restoring File Explorer windows..." },
+            { "Disinstallazione completata.", "Uninstall completed." },
+            { "Disinstallazione non riuscita.", "Uninstall failed." },
+            { "Attendere il completamento dell'operazione.", "Please wait for the operation to complete." },
+            { "Codice di uscita: ", "Exit code: " },
+            { "Log: ", "Log: " },
             { "Profilo manuale", "Manual profile" },
             { "Profilo locale veloce", "Fast local drive profile" },
             { "Profilo USB/rimovibile - file piccoli", "USB/removable profile - small files" },
@@ -1163,10 +1175,109 @@ namespace RobocopyDrop
         public string SignerSubject;
     }
 
+    internal sealed class UninstallConfirmationForm : Form
+    {
+        public UninstallConfirmationForm()
+        {
+            Text = UiText.T("Robocopy Drop - Disinstalla");
+            StartPosition = FormStartPosition.CenterScreen;
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            ShowInTaskbar = true;
+            TopMost = true;
+            ClientSize = new Size(430, 172);
+            Font = SystemFonts.MessageBoxFont;
+            AutoScaleMode = AutoScaleMode.Dpi;
+            Icon = SystemIcons.Question;
+
+            PictureBox iconBox = new PictureBox();
+            iconBox.Image = SystemIcons.Question.ToBitmap();
+            iconBox.SizeMode = PictureBoxSizeMode.CenterImage;
+            iconBox.Location = new Point(24, 24);
+            iconBox.Size = new Size(48, 48);
+            Controls.Add(iconBox);
+
+            Label questionLabel = new Label();
+            questionLabel.Text = UiText.T("Vuoi disinstallare Robocopy Drop?");
+            questionLabel.Font = new Font(
+                Font.FontFamily,
+                10.0f,
+                FontStyle.Regular);
+            questionLabel.Location = new Point(84, 27);
+            questionLabel.Size = new Size(320, 24);
+            Controls.Add(questionLabel);
+
+            Label noteLabel = new Label();
+            noteLabel.Text = UiText.T(
+                "Esplora file verra riavviato temporaneamente.");
+            noteLabel.ForeColor = SystemColors.GrayText;
+            noteLabel.Location = new Point(84, 55);
+            noteLabel.Size = new Size(320, 42);
+            Controls.Add(noteLabel);
+
+            Button yesButton = new Button();
+            yesButton.Text = UiText.T("Si");
+            yesButton.DialogResult = DialogResult.Yes;
+            yesButton.Location = new Point(244, 124);
+            yesButton.Size = new Size(78, 30);
+            Controls.Add(yesButton);
+
+            Button noButton = new Button();
+            noButton.Text = UiText.T("No");
+            noButton.DialogResult = DialogResult.No;
+            noButton.Location = new Point(330, 124);
+            noButton.Size = new Size(78, 30);
+            Controls.Add(noButton);
+
+            AcceptButton = noButton;
+            CancelButton = noButton;
+            Shown += delegate
+            {
+                noButton.Focus();
+                Activate();
+                BringToFront();
+            };
+        }
+    }
+
     internal static class ExplorerSessionCoordinator
     {
         private const string ExternalRestartProperty =
             "ROBOCOPYDROP_EXTERNAL_EXPLORER_RESTART=1";
+
+        public static void StartUninstallerAndRestoreFolders(
+            string installerArguments)
+        {
+            if (string.IsNullOrWhiteSpace(installerArguments))
+                throw new ArgumentException("installerArguments");
+
+            List<string> paths = CaptureOpenFolderPaths();
+            string operationId = Guid.NewGuid().ToString("N");
+            string statePath = Path.Combine(
+                Path.GetTempPath(),
+                "RobocopyDrop-Explorer-" + operationId + ".txt");
+            string logPath = Path.Combine(
+                Path.GetTempPath(),
+                "RobocopyDrop-uninstall-" + operationId + ".log");
+
+            File.WriteAllLines(
+                statePath,
+                paths.ToArray(),
+                new UTF8Encoding(true));
+
+            string fullArguments =
+                installerArguments + " " +
+                ExternalRestartProperty +
+                " MSIRESTARTMANAGERCONTROL=Disable" +
+                " /L*V! " + PathHelpers.QuoteArgument(logPath);
+
+            string script = BuildPowerShellUninstallScript(
+                statePath,
+                fullArguments,
+                logPath);
+            StartPowerShellCoordinator(script, statePath);
+        }
 
         public static void StartInstallerAndRestoreFolders(
             string installerArguments)
@@ -1186,6 +1297,13 @@ namespace RobocopyDrop
 
             string fullArguments = installerArguments + " " + ExternalRestartProperty;
             string script = BuildPowerShellScript(statePath, fullArguments);
+            StartPowerShellCoordinator(script, statePath);
+        }
+
+        private static void StartPowerShellCoordinator(
+            string script,
+            string statePath)
+        {
             string encodedCommand = Convert.ToBase64String(
                 Encoding.Unicode.GetBytes(script));
 
@@ -1221,6 +1339,131 @@ namespace RobocopyDrop
                 try { File.Delete(statePath); } catch { }
                 throw;
             }
+        }
+
+        private static string BuildPowerShellUninstallScript(
+            string statePath,
+            string installerArguments,
+            string logPath)
+        {
+            string stateLiteral = EscapePowerShellLiteral(statePath);
+            string argumentsLiteral = EscapePowerShellLiteral(
+                installerArguments);
+            string logLiteral = EscapePowerShellLiteral(logPath);
+            string titleLiteral = EscapePowerShellLiteral(
+                UiText.T("Disinstallazione in corso"));
+            string preparingLiteral = EscapePowerShellLiteral(
+                UiText.T("Preparazione della disinstallazione..."));
+            string removingLiteral = EscapePowerShellLiteral(
+                UiText.T("Rimozione di Robocopy Drop..."));
+            string restoringLiteral = EscapePowerShellLiteral(
+                UiText.T("Ripristino delle finestre di Esplora file..."));
+            string completedLiteral = EscapePowerShellLiteral(
+                UiText.T("Disinstallazione completata."));
+            string failedLiteral = EscapePowerShellLiteral(
+                UiText.T("Disinstallazione non riuscita."));
+            string waitLiteral = EscapePowerShellLiteral(
+                UiText.T("Attendere il completamento dell'operazione."));
+            string exitCodeLiteral = EscapePowerShellLiteral(
+                UiText.T("Codice di uscita: "));
+            string logLabelLiteral = EscapePowerShellLiteral(
+                UiText.T("Log: "));
+            string closeLiteral = EscapePowerShellLiteral(
+                UiText.T("Chiudi"));
+
+            StringBuilder script = new StringBuilder();
+            script.Append("$ErrorActionPreference='SilentlyContinue';");
+            script.Append("Add-Type -AssemblyName System.Windows.Forms;");
+            script.Append("Add-Type -AssemblyName System.Drawing;");
+            script.Append("[System.Windows.Forms.Application]::EnableVisualStyles();");
+            script.Append("$state='").Append(stateLiteral).Append("';");
+            script.Append("$arguments='").Append(argumentsLiteral).Append("';");
+            script.Append("$log='").Append(logLiteral).Append("';");
+            script.Append("$msi=Join-Path $env:SystemRoot 'System32\\msiexec.exe';");
+            script.Append("$explorer=Join-Path $env:SystemRoot 'explorer.exe';");
+            script.Append("$form=New-Object System.Windows.Forms.Form;");
+            script.Append("$form.Text='").Append(titleLiteral).Append("';");
+            script.Append("$form.StartPosition='CenterScreen';");
+            script.Append("$form.FormBorderStyle='FixedDialog';");
+            script.Append("$form.MaximizeBox=$false;$form.MinimizeBox=$false;");
+            script.Append("$form.ControlBox=$false;$form.ShowInTaskbar=$true;");
+            script.Append("$form.TopMost=$true;");
+            script.Append("$form.ClientSize=New-Object System.Drawing.Size(470,170);");
+            script.Append("$form.Font=[System.Drawing.SystemFonts]::MessageBoxFont;");
+            script.Append("$icon=New-Object System.Windows.Forms.PictureBox;");
+            script.Append("$icon.Image=[System.Drawing.SystemIcons]::Information.ToBitmap();");
+            script.Append("$icon.SizeMode='CenterImage';");
+            script.Append("$icon.Location=New-Object System.Drawing.Point(22,22);");
+            script.Append("$icon.Size=New-Object System.Drawing.Size(48,48);");
+            script.Append("$status=New-Object System.Windows.Forms.Label;");
+            script.Append("$status.Text='").Append(preparingLiteral).Append("';");
+            script.Append("$status.Location=New-Object System.Drawing.Point(82,24);");
+            script.Append("$status.Size=New-Object System.Drawing.Size(360,28);");
+            script.Append("$status.Font=New-Object System.Drawing.Font($form.Font.FontFamily,11,[System.Drawing.FontStyle]::Bold);");
+            script.Append("$detail=New-Object System.Windows.Forms.Label;");
+            script.Append("$detail.Text='").Append(waitLiteral).Append("';");
+            script.Append("$detail.Location=New-Object System.Drawing.Point(82,56);");
+            script.Append("$detail.Size=New-Object System.Drawing.Size(360,42);");
+            script.Append("$detail.ForeColor=[System.Drawing.SystemColors]::GrayText;");
+            script.Append("$progress=New-Object System.Windows.Forms.ProgressBar;");
+            script.Append("$progress.Location=New-Object System.Drawing.Point(22,112);");
+            script.Append("$progress.Size=New-Object System.Drawing.Size(426,22);");
+            script.Append("$progress.Style='Marquee';$progress.MarqueeAnimationSpeed=28;");
+            script.Append("$close=New-Object System.Windows.Forms.Button;");
+            script.Append("$close.Text='").Append(closeLiteral).Append("';");
+            script.Append("$close.Location=New-Object System.Drawing.Point(348,138);");
+            script.Append("$close.Size=New-Object System.Drawing.Size(100,28);");
+            script.Append("$close.Visible=$false;");
+            script.Append("$close.Add_Click({$form.Close()});");
+            script.Append("$form.Controls.AddRange(@($icon,$status,$detail,$progress,$close));");
+            script.Append("$timer=New-Object System.Windows.Forms.Timer;");
+            script.Append("$timer.Interval=250;");
+            script.Append("$script:process=$null;$script:started=$null;");
+            script.Append("$form.Add_Shown({");
+            script.Append("$form.Activate();$form.BringToFront();");
+            script.Append("try{$script:process=Start-Process -FilePath $msi -ArgumentList $arguments -PassThru;");
+            script.Append("$script:started=Get-Date;$timer.Start();}");
+            script.Append("catch{$status.Text='").Append(failedLiteral).Append("';");
+            script.Append("$detail.Text=$_.Exception.Message;$progress.Style='Blocks';");
+            script.Append("$progress.Value=0;$close.Visible=$true;$form.ControlBox=$true;}");
+            script.Append("});");
+            script.Append("$timer.Add_Tick({");
+            script.Append("if($null -eq $script:process){return;}");
+            script.Append("if(-not $script:process.HasExited){");
+            script.Append("if(((Get-Date)-$script:started).TotalSeconds -ge 1.5){");
+            script.Append("$status.Text='").Append(removingLiteral).Append("';}");
+            script.Append("$form.Activate();return;}");
+            script.Append("$timer.Stop();");
+            script.Append("$status.Text='").Append(restoringLiteral).Append("';");
+            script.Append("$form.Refresh();[System.Windows.Forms.Application]::DoEvents();");
+            script.Append("$paths=@();");
+            script.Append("if(Test-Path -LiteralPath $state){");
+            script.Append("$paths=@(Get-Content -LiteralPath $state -Encoding UTF8 | ");
+            script.Append("Where-Object {-not [string]::IsNullOrWhiteSpace($_) -and ");
+            script.Append("(Test-Path -LiteralPath $_ -PathType Container)});}");
+            script.Append("$explorerProcess=Get-Process explorer -ErrorAction SilentlyContinue;");
+            script.Append("if($paths.Count -gt 0){");
+            script.Append("Start-Process -FilePath $explorer -ArgumentList ('\"'+$paths[0]+'\"');");
+            script.Append("Start-Sleep -Milliseconds 650;");
+            script.Append("for($index=1;$index -lt $paths.Count;$index++){");
+            script.Append("Start-Process -FilePath $explorer -ArgumentList ('\"'+$paths[$index]+'\"');");
+            script.Append("Start-Sleep -Milliseconds 180;}");
+            script.Append("}elseif(-not $explorerProcess){Start-Process -FilePath $explorer;}");
+            script.Append("Remove-Item -LiteralPath $state -Force -ErrorAction SilentlyContinue;");
+            script.Append("if($script:process.ExitCode -eq 0){");
+            script.Append("$status.Text='").Append(completedLiteral).Append("';");
+            script.Append("$detail.Text='';$progress.Style='Continuous';$progress.Value=100;");
+            script.Append("Remove-Item -LiteralPath $log -Force -ErrorAction SilentlyContinue;");
+            script.Append("$form.Refresh();[System.Windows.Forms.Application]::DoEvents();");
+            script.Append("Start-Sleep -Milliseconds 550;$form.Close();");
+            script.Append("}else{");
+            script.Append("$status.Text='").Append(failedLiteral).Append("';");
+            script.Append("$detail.Text='").Append(exitCodeLiteral).Append("' + $script:process.ExitCode + '  ").Append(logLabelLiteral).Append("' + $log;");
+            script.Append("$progress.Style='Blocks';$progress.Value=0;");
+            script.Append("$close.Visible=$true;$form.ControlBox=$true;$form.Activate();}");
+            script.Append("});");
+            script.Append("[System.Windows.Forms.Application]::Run($form);");
+            return script.ToString();
         }
 
         private static List<string> CaptureOpenFolderPaths()
@@ -4876,12 +5119,12 @@ namespace RobocopyDrop
                 return 22;
             }
 
-            DialogResult answer = MessageBox.Show(
-                UiText.T("Vuoi disinstallare Robocopy Drop?"),
-                UiText.T("Robocopy Drop - Disinstalla"),
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question,
-                MessageBoxDefaultButton.Button2);
+            DialogResult answer;
+            using (UninstallConfirmationForm confirmation =
+                new UninstallConfirmationForm())
+            {
+                answer = confirmation.ShowDialog();
+            }
 
             if (answer != DialogResult.Yes) return 0;
 
@@ -4889,9 +5132,9 @@ namespace RobocopyDrop
             {
                 Thread.Sleep(250);
 
-                ExplorerSessionCoordinator.StartInstallerAndRestoreFolders(
+                ExplorerSessionCoordinator.StartUninstallerAndRestoreFolders(
                     "/x " + parsedProductCode.ToString("B") +
-                    " /passive /norestart");
+                    " /qn /norestart");
                 return 0;
             }
             catch (Exception ex)
