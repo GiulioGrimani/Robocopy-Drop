@@ -1254,28 +1254,53 @@ namespace RobocopyDrop
 
             List<string> paths = CaptureOpenFolderPaths();
             string operationId = Guid.NewGuid().ToString("N");
+            string timestamp = DateTime.Now.ToString(
+                "yyyyMMdd-HHmmss",
+                CultureInfo.InvariantCulture);
+
+            string logDirectory = Path.Combine(
+                Environment.GetFolderPath(
+                    Environment.SpecialFolder.LocalApplicationData),
+                "RobocopyDrop",
+                "Logs");
+            Directory.CreateDirectory(logDirectory);
+
+            string baseName =
+                "uninstall-" + timestamp + "-" + operationId;
             string statePath = Path.Combine(
                 Path.GetTempPath(),
-                "RobocopyDrop-Explorer-" + operationId + ".txt");
-            string logPath = Path.Combine(
-                Path.GetTempPath(),
-                "RobocopyDrop-uninstall-" + operationId + ".log");
+                baseName + "-folders.txt");
+            string msiLogPath = Path.Combine(
+                logDirectory,
+                baseName + "-msi.log");
+            string coordinatorLogPath = Path.Combine(
+                logDirectory,
+                baseName + "-coordinator.log");
 
             File.WriteAllLines(
                 statePath,
                 paths.ToArray(),
                 new UTF8Encoding(true));
 
+            File.AppendAllText(
+                coordinatorLogPath,
+                DateTime.Now.ToString("o", CultureInfo.InvariantCulture) +
+                " [runner] Avvio coordinatore; cartelle rilevate=" +
+                paths.Count.ToString(CultureInfo.InvariantCulture) +
+                Environment.NewLine,
+                new UTF8Encoding(true));
+
             string fullArguments =
                 installerArguments + " " +
                 ExternalRestartProperty +
                 " MSIRESTARTMANAGERCONTROL=Disable" +
-                " /L*V! " + PathHelpers.QuoteArgument(logPath);
+                " /L*V! " + PathHelpers.QuoteArgument(msiLogPath);
 
             string script = BuildPowerShellUninstallScript(
                 statePath,
                 fullArguments,
-                logPath);
+                msiLogPath,
+                coordinatorLogPath);
             StartPowerShellCoordinator(script, statePath);
         }
 
@@ -1344,12 +1369,15 @@ namespace RobocopyDrop
         private static string BuildPowerShellUninstallScript(
             string statePath,
             string installerArguments,
-            string logPath)
+            string msiLogPath,
+            string coordinatorLogPath)
         {
             string stateLiteral = EscapePowerShellLiteral(statePath);
             string argumentsLiteral = EscapePowerShellLiteral(
                 installerArguments);
-            string logLiteral = EscapePowerShellLiteral(logPath);
+            string msiLogLiteral = EscapePowerShellLiteral(msiLogPath);
+            string coordinatorLogLiteral = EscapePowerShellLiteral(
+                coordinatorLogPath);
             string titleLiteral = EscapePowerShellLiteral(
                 UiText.T("Disinstallazione in corso"));
             string preparingLiteral = EscapePowerShellLiteral(
@@ -1372,15 +1400,33 @@ namespace RobocopyDrop
                 UiText.T("Chiudi"));
 
             StringBuilder script = new StringBuilder();
-            script.Append("$ErrorActionPreference='SilentlyContinue';");
+            script.Append("$ErrorActionPreference='Continue';");
             script.Append("Add-Type -AssemblyName System.Windows.Forms;");
             script.Append("Add-Type -AssemblyName System.Drawing;");
+            script.Append("Add-Type -TypeDefinition @'");
+            script.Append("using System;using System.Runtime.InteropServices;");
+            script.Append("public static class RobocopyDropShellNative{");
+            script.Append("[DllImport(\\\"user32.dll\\\",CharSet=CharSet.Unicode)]");
+            script.Append("public static extern IntPtr FindWindow(string c,string n);}");
+            script.Append("'@;");
             script.Append("[System.Windows.Forms.Application]::EnableVisualStyles();");
             script.Append("$state='").Append(stateLiteral).Append("';");
             script.Append("$arguments='").Append(argumentsLiteral).Append("';");
-            script.Append("$log='").Append(logLiteral).Append("';");
+            script.Append("$msiLog='").Append(msiLogLiteral).Append("';");
+            script.Append("$trace='").Append(coordinatorLogLiteral).Append("';");
             script.Append("$msi=Join-Path $env:SystemRoot 'System32\\msiexec.exe';");
             script.Append("$explorer=Join-Path $env:SystemRoot 'explorer.exe';");
+
+            script.Append("function Trace([string]$message){");
+            script.Append("try{$line=(Get-Date -Format o)+' '+$message;");
+            script.Append("Add-Content -LiteralPath $trace -Value $line -Encoding UTF8;}catch{}};");
+            script.Append("function ExplorerPids(){");
+            script.Append("@(Get-Process explorer -ErrorAction SilentlyContinue|");
+            script.Append("ForEach-Object{$_.Id})};");
+            script.Append("function ShellReady(){");
+            script.Append("return [RobocopyDropShellNative]::FindWindow(");
+            script.Append("'Shell_TrayWnd',$null)-ne [IntPtr]::Zero};");
+
             script.Append("$form=New-Object System.Windows.Forms.Form;");
             script.Append("$form.Text='").Append(titleLiteral).Append("';");
             script.Append("$form.StartPosition='CenterScreen';");
@@ -1399,11 +1445,12 @@ namespace RobocopyDrop
             script.Append("$status.Text='").Append(preparingLiteral).Append("';");
             script.Append("$status.Location=New-Object System.Drawing.Point(82,24);");
             script.Append("$status.Size=New-Object System.Drawing.Size(360,28);");
-            script.Append("$status.Font=New-Object System.Drawing.Font($form.Font.FontFamily,11,[System.Drawing.FontStyle]::Bold);");
+            script.Append("$status.Font=New-Object System.Drawing.Font(");
+            script.Append("$form.Font.FontFamily,11,[System.Drawing.FontStyle]::Bold);");
             script.Append("$detail=New-Object System.Windows.Forms.Label;");
             script.Append("$detail.Text='").Append(waitLiteral).Append("';");
             script.Append("$detail.Location=New-Object System.Drawing.Point(82,56);");
-            script.Append("$detail.Size=New-Object System.Drawing.Size(360,42);");
+            script.Append("$detail.Size=New-Object System.Drawing.Size(360,48);");
             script.Append("$detail.ForeColor=[System.Drawing.SystemColors]::GrayText;");
             script.Append("$progress=New-Object System.Windows.Forms.ProgressBar;");
             script.Append("$progress.Location=New-Object System.Drawing.Point(22,112);");
@@ -1416,52 +1463,118 @@ namespace RobocopyDrop
             script.Append("$close.Visible=$false;");
             script.Append("$close.Add_Click({$form.Close()});");
             script.Append("$form.Controls.AddRange(@($icon,$status,$detail,$progress,$close));");
+
+            script.Append("function Pump(){");
+            script.Append("try{$form.Refresh();");
+            script.Append("[System.Windows.Forms.Application]::DoEvents();");
+            script.Append("$form.Activate();$form.BringToFront();}catch{}};");
+            script.Append("function WaitShell([int]$seconds){");
+            script.Append("$limit=(Get-Date).AddSeconds($seconds);");
+            script.Append("while((Get-Date)-lt $limit){");
+            script.Append("if(ShellReady){Trace '[explorer] Shell_TrayWnd rilevata';return $true;}");
+            script.Append("Pump;Start-Sleep -Milliseconds 250;}");
+            script.Append("Trace '[explorer] Timeout attesa Shell_TrayWnd';return $false;};");
+
+            script.Append("function RestoreExplorer(){");
+            script.Append("Trace ('[explorer] Ripristino iniziato; PID presenti=' + ");
+            script.Append("((ExplorerPids)-join ','));");
+            script.Append("$paths=@();");
+            script.Append("if(Test-Path -LiteralPath $state){");
+            script.Append("$paths=@(Get-Content -LiteralPath $state -Encoding UTF8|");
+            script.Append("Where-Object{-not [string]::IsNullOrWhiteSpace($_)-and ");
+            script.Append("(Test-Path -LiteralPath $_ -PathType Container)});}");
+            script.Append("Trace ('[explorer] Percorsi validi=' + $paths.Count);");
+            script.Append("$firstUsed=$false;");
+            script.Append("if(-not (ShellReady)){");
+            script.Append("try{if($paths.Count-gt 0){");
+            script.Append("Trace ('[explorer] Avvio shell con primo percorso: '+$paths[0]);");
+            script.Append("Start-Process -FilePath $explorer -ArgumentList ");
+            script.Append("('\\\"'+$paths[0]+'\\\"');$firstUsed=$true;");
+            script.Append("}else{Trace '[explorer] Avvio shell senza percorso';");
+            script.Append("Start-Process -FilePath $explorer;}}");
+            script.Append("catch{Trace ('[explorer] Primo avvio fallito: '+$_.Exception.Message);}}");
+            script.Append("$ready=WaitShell 15;");
+            script.Append("if(-not $ready){");
+            script.Append("Trace '[explorer] Fallback: arresto processi residui e secondo avvio';");
+            script.Append("Get-Process explorer -ErrorAction SilentlyContinue|");
+            script.Append("Stop-Process -Force -ErrorAction SilentlyContinue;");
+            script.Append("Start-Sleep -Milliseconds 900;");
+            script.Append("try{if($paths.Count-gt 0){");
+            script.Append("Start-Process -FilePath $explorer -ArgumentList ");
+            script.Append("('\\\"'+$paths[0]+'\\\"');$firstUsed=$true;");
+            script.Append("}else{Start-Process -FilePath $explorer;}}");
+            script.Append("catch{Trace ('[explorer] Secondo avvio fallito: '+$_.Exception.Message);}");
+            script.Append("$ready=WaitShell 20;}");
+            script.Append("if($ready){");
+            script.Append("$startIndex=0;if($firstUsed){$startIndex=1};");
+            script.Append("for($index=$startIndex;$index-lt$paths.Count;$index++){");
+            script.Append("try{Trace ('[explorer] Riapertura: '+$paths[$index]);");
+            script.Append("Start-Process -FilePath $explorer -ArgumentList ");
+            script.Append("('\\\"'+$paths[$index]+'\\\"');");
+            script.Append("Start-Sleep -Milliseconds 220;}catch{");
+            script.Append("Trace ('[explorer] Riapertura fallita: '+$_.Exception.Message);}}}");
+            script.Append("Trace ('[explorer] Ripristino concluso; ready='+$ready+");
+            script.Append("'; PID='+((ExplorerPids)-join ','));");
+            script.Append("return $ready;};");
+
             script.Append("$timer=New-Object System.Windows.Forms.Timer;");
             script.Append("$timer.Interval=250;");
             script.Append("$script:process=$null;$script:started=$null;");
+            script.Append("$script:lastHeartbeat=Get-Date;");
             script.Append("$form.Add_Shown({");
             script.Append("$form.Activate();$form.BringToFront();");
-            script.Append("try{$script:process=Start-Process -FilePath $msi -ArgumentList $arguments -PassThru;");
-            script.Append("$script:started=Get-Date;$timer.Start();}");
-            script.Append("catch{$status.Text='").Append(failedLiteral).Append("';");
-            script.Append("$detail.Text=$_.Exception.Message;$progress.Style='Blocks';");
+            script.Append("Trace ('[ui] Form mostrata; PID PowerShell='+$PID);");
+            script.Append("Trace ('[msi] Argomenti: '+$arguments);");
+            script.Append("try{$script:process=Start-Process -FilePath $msi ");
+            script.Append("-ArgumentList $arguments -PassThru;");
+            script.Append("$script:started=Get-Date;");
+            script.Append("Trace ('[msi] Avviato PID='+$script:process.Id);");
+            script.Append("$timer.Start();}");
+            script.Append("catch{Trace ('[msi] Avvio fallito: '+$_.Exception.ToString());");
+            script.Append("$status.Text='").Append(failedLiteral).Append("';");
+            script.Append("$detail.Text=$_.Exception.Message+'  ").Append(logLabelLiteral);
+            script.Append("' + $trace;$progress.Style='Blocks';");
             script.Append("$progress.Value=0;$close.Visible=$true;$form.ControlBox=$true;}");
             script.Append("});");
+
             script.Append("$timer.Add_Tick({");
-            script.Append("if($null -eq $script:process){return;}");
-            script.Append("if(-not $script:process.HasExited){");
-            script.Append("if(((Get-Date)-$script:started).TotalSeconds -ge 1.5){");
+            script.Append("if($null-eq$script:process){return;}");
+            script.Append("if(-not$script:process.HasExited){");
+            script.Append("if(((Get-Date)-$script:started).TotalSeconds-ge 1.5){");
             script.Append("$status.Text='").Append(removingLiteral).Append("';}");
+            script.Append("if(((Get-Date)-$script:lastHeartbeat).TotalSeconds-ge 2){");
+            script.Append("$script:lastHeartbeat=Get-Date;");
+            script.Append("Trace ('[heartbeat] elapsed=' + ");
+            script.Append("[int]((Get-Date)-$script:started).TotalSeconds + ");
+            script.Append("'; explorer=' + ((ExplorerPids)-join ',') + ");
+            script.Append("'; shellReady=' + (ShellReady));}");
             script.Append("$form.Activate();return;}");
             script.Append("$timer.Stop();");
+            script.Append("Trace ('[msi] Terminato; exitCode='+$script:process.ExitCode+");
+            script.Append("'; durataSec='+[int]((Get-Date)-$script:started).TotalSeconds);");
             script.Append("$status.Text='").Append(restoringLiteral).Append("';");
-            script.Append("$form.Refresh();[System.Windows.Forms.Application]::DoEvents();");
-            script.Append("$paths=@();");
-            script.Append("if(Test-Path -LiteralPath $state){");
-            script.Append("$paths=@(Get-Content -LiteralPath $state -Encoding UTF8 | ");
-            script.Append("Where-Object {-not [string]::IsNullOrWhiteSpace($_) -and ");
-            script.Append("(Test-Path -LiteralPath $_ -PathType Container)});}");
-            script.Append("$explorerProcess=Get-Process explorer -ErrorAction SilentlyContinue;");
-            script.Append("if($paths.Count -gt 0){");
-            script.Append("Start-Process -FilePath $explorer -ArgumentList ('\"'+$paths[0]+'\"');");
-            script.Append("Start-Sleep -Milliseconds 650;");
-            script.Append("for($index=1;$index -lt $paths.Count;$index++){");
-            script.Append("Start-Process -FilePath $explorer -ArgumentList ('\"'+$paths[$index]+'\"');");
-            script.Append("Start-Sleep -Milliseconds 180;}");
-            script.Append("}elseif(-not $explorerProcess){Start-Process -FilePath $explorer;}");
-            script.Append("Remove-Item -LiteralPath $state -Force -ErrorAction SilentlyContinue;");
-            script.Append("if($script:process.ExitCode -eq 0){");
+            script.Append("$detail.Text='").Append(waitLiteral).Append("';Pump;");
+            script.Append("$explorerRestored=RestoreExplorer;");
+            script.Append("try{Remove-Item -LiteralPath $state -Force ");
+            script.Append("-ErrorAction SilentlyContinue;}catch{};");
+            script.Append("if($script:process.ExitCode-eq 0-and$explorerRestored){");
             script.Append("$status.Text='").Append(completedLiteral).Append("';");
-            script.Append("$detail.Text='';$progress.Style='Continuous';$progress.Value=100;");
-            script.Append("Remove-Item -LiteralPath $log -Force -ErrorAction SilentlyContinue;");
-            script.Append("$form.Refresh();[System.Windows.Forms.Application]::DoEvents();");
-            script.Append("Start-Sleep -Milliseconds 550;$form.Close();");
+            script.Append("$detail.Text='").Append(logLabelLiteral).Append("' + $trace;");
+            script.Append("$progress.Style='Continuous';$progress.Value=100;");
+            script.Append("Trace '[ui] Operazione completata correttamente';Pump;");
+            script.Append("Start-Sleep -Milliseconds 900;$form.Close();");
             script.Append("}else{");
             script.Append("$status.Text='").Append(failedLiteral).Append("';");
-            script.Append("$detail.Text='").Append(exitCodeLiteral).Append("' + $script:process.ExitCode + '  ").Append(logLabelLiteral).Append("' + $log;");
+            script.Append("$detail.Text='").Append(exitCodeLiteral).Append("' + ");
+            script.Append("$script:process.ExitCode + '  ").Append(logLabelLiteral);
+            script.Append("' + $trace + '  MSI: ' + $msiLog;");
             script.Append("$progress.Style='Blocks';$progress.Value=0;");
-            script.Append("$close.Visible=$true;$form.ControlBox=$true;$form.Activate();}");
+            script.Append("$close.Visible=$true;$form.ControlBox=$true;");
+            script.Append("Trace ('[ui] Fallimento finale; explorerRestored='+$explorerRestored);");
+            script.Append("$form.Activate();$form.BringToFront();}");
             script.Append("});");
+
+            script.Append("$form.Add_FormClosed({Trace '[ui] Form chiusa';});");
             script.Append("[System.Windows.Forms.Application]::Run($form);");
             return script.ToString();
         }
