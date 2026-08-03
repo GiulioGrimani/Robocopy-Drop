@@ -238,12 +238,14 @@
                 Arguments="--check-updates"
                 WorkingDirectory="INSTALLFOLDER"
                 Icon="RobocopyDropIcon" />
+      <!-- The uninstall entry intentionally invokes the signed Windows
+           Installer executable directly. It must remain usable even when
+           Smart App Control blocks the unsigned Robocopy Drop runner. -->
       <Shortcut Id="UninstallShortcut"
                 Name="$(var.UninstallShortcutName)"
                 Description="$(var.UninstallShortcutDescription)"
-                Target="[INSTALLFOLDER]RobocopyDropRunner.exe"
-                Arguments="--uninstall [ProductCode]"
-                WorkingDirectory="INSTALLFOLDER"
+                Target="[System64Folder]msiexec.exe"
+                Arguments="/x [ProductCode] /norestart"
                 Icon="RobocopyDropIcon" />
       <RemoveFolder Id="RemoveProgramMenuFolder" On="uninstall" />
       <RegistryValue Root="HKCU"
