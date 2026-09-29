@@ -366,7 +366,7 @@ function Get-LanguageProperties([string]$Language) {
             UpdateShortcutName='Robocopy Drop - Check for Updates';
             UpdateShortcutDescription='Check GitHub for a newer Robocopy Drop release';
             UninstallShortcutName='Robocopy Drop - Uninstall';
-            UninstallShortcutDescription='Confirm and remove Robocopy Drop';
+            UninstallShortcutDescription='Start Windows Installer and remove Robocopy Drop';
         }
     }
     return @{
@@ -386,7 +386,7 @@ function Get-LanguageProperties([string]$Language) {
         UpdateShortcutName='Robocopy Drop - Controlla aggiornamenti';
         UpdateShortcutDescription='Controlla su GitHub se e disponibile una nuova versione';
         UninstallShortcutName='Robocopy Drop - Disinstalla';
-        UninstallShortcutDescription='Conferma e rimuove Robocopy Drop';
+        UninstallShortcutDescription='Avvia Windows Installer e rimuove Robocopy Drop';
     }
 }
 
@@ -547,9 +547,12 @@ try {
             throw "Scorciatoia Start mancante nel progetto WiX: $requiredShortcut"
         }
     }
-    if ([string]$shortcutById['UninstallShortcut'].Target -notmatch 'RobocopyDropRunner\.exe$' -or
-        [string]$shortcutById['UninstallShortcut'].Arguments -notmatch '--uninstall\s+\[ProductCode\]') {
-        throw 'La scorciatoia Disinstalla non avvia il runner con --uninstall [ProductCode].'
+    $uninstallTarget = [string]$shortcutById['UninstallShortcut'].Target
+    $uninstallArguments = [string]$shortcutById['UninstallShortcut'].Arguments
+
+    if ($uninstallTarget -ne '[System64Folder]msiexec.exe' -or
+        $uninstallArguments -notmatch '^\s*/x\s+\[ProductCode\]\s+/norestart\s*$') {
+        throw 'La scorciatoia Disinstalla non punta direttamente a [System64Folder]msiexec.exe /x [ProductCode] /norestart.'
     }
 
     $externalRestartProperty = @($packageXml.SelectNodes("//*[local-name()='Property']")) |
@@ -808,7 +811,7 @@ using System.Reflection;
         publisher=$Publisher; runnerSourceBase=$runnerSourceBase; runnerBuild='compiled from source'; signed=$script:SigningEnabled;
         wixVersion='6.0.2'; distribution='MSI-only GitHub release'; setup='not included';
         startMenuEntries=@('settings','guide','reports','updates','uninstall');
-        directUninstall='RobocopyDropRunner.exe --uninstall [ProductCode]';
+        directUninstall='msiexec.exe /x [ProductCode] /norestart';
         updateFeed=[ordered]@{ provider='GitHub Releases'; owner=[string]$githubUpdate.owner; repository=[string]$githubUpdate.repository; automaticCheckHours=24; signedUpdatesRequired=[bool]$githubUpdate.requireSignedUpdates };
         automaticThreads=[ordered]@{ localFixed=32; usbSmallFiles=4; usbLargeFiles=8; network=8; optical=1; fallback=8 };
         files=@($manifestFiles | ForEach-Object {

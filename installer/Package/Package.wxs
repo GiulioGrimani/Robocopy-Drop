@@ -238,12 +238,13 @@
                 Arguments="--check-updates"
                 WorkingDirectory="INSTALLFOLDER"
                 Icon="RobocopyDropIcon" />
+      <!-- The uninstall shortcut intentionally invokes Windows Installer directly.
+           It must remain usable even if the Robocopy Drop runner cannot start. -->
       <Shortcut Id="UninstallShortcut"
                 Name="$(var.UninstallShortcutName)"
                 Description="$(var.UninstallShortcutDescription)"
-                Target="[INSTALLFOLDER]RobocopyDropRunner.exe"
-                Arguments="--uninstall [ProductCode]"
-                WorkingDirectory="INSTALLFOLDER"
+                Target="[System64Folder]msiexec.exe"
+                Arguments="/x [ProductCode] /norestart"
                 Icon="RobocopyDropIcon" />
       <RemoveFolder Id="RemoveProgramMenuFolder" On="uninstall" />
       <RegistryValue Root="HKCU"
